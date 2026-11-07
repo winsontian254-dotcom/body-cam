@@ -1,0 +1,6 @@
+{
+  "_note": "Every asset file in this repo, with licence and source. Only CC0 or the owner's own work.",
+  "models/human_kit.glb": { "license": "Original (owner's Neon Veins project) + CC0 MakeHuman base mesh", "source": "NEON_VIENS/assets/src/human_kit.glb, built by NEON_VIENS/tools/blender/build_humans.py; head/hands from the CC0 MakeHuman base mesh (models/MAKEHUMAN_LICENSE.CC0.md)", "author": "winsontian254-dotcom; MakeHuman community (CC0)" },
+  "models/hand_grip.glb": { "license": "Original (owner's Neon Veins project)", "source": "NEON_VIENS/assets/src/w_hand_grip.glb (tools/blender/build_weapons.py): gloved fist closed round a vertical grip", "author": "winsontian254-dotcom" },
+  "models/hand_hold.glb": { "license": "Original (owner's Neon Veins project)", "source": "NEON_VIENS/assets/src/w_hand_hold.glb (tools/blender/build_weapons.py): gloved fist round a horizontal handle; mirror with negative x scale for the left hand", "author": "winsontian254-dotcom" }
+}
