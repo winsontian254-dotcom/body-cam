@@ -1,0 +1,674 @@
+{
+ "asphalt": {
+  "src": "ph:asphalt_02",
+  "res": "2k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 3.0,
+  "mean": [
+   0.1042,
+   0.1016,
+   0.0905
+  ]
+ },
+ "concrete_wall": {
+  "src": "ph:concrete_wall_006",
+  "res": "2k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.1067,
+   0.0819,
+   0.0605
+  ]
+ },
+ "concrete_floor": {
+  "src": "ph:concrete_floor_worn_001",
+  "res": "2k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 3.0,
+  "mean": [
+   0.0928,
+   0.0946,
+   0.0885
+  ]
+ },
+ "concrete_panels": {
+  "src": "ph:concrete_wall_004",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.1808,
+   0.1706,
+   0.1261
+  ]
+ },
+ "pavement": {
+  "src": "ph:concrete_pavement",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 1.8,
+  "mean": [
+   0.214,
+   0.1762,
+   0.134
+  ]
+ },
+ "brick": {
+  "src": "ph:factory_brick",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 1.5,
+  "mean": [
+   0.2432,
+   0.1526,
+   0.0945
+  ]
+ },
+ "brick_red": {
+  "src": "ph:large_red_bricks",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.4005,
+   0.1818,
+   0.0935
+  ]
+ },
+ "plaster": {
+  "src": "ph:grey_plaster",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.0,
+  "mean": [
+   0.2639,
+   0.2409,
+   0.1774
+  ]
+ },
+ "plaster_white": {
+  "src": "ph:painted_plaster_wall",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.4069,
+   0.3655,
+   0.3514
+  ]
+ },
+ "tile_white": {
+  "src": "ph:long_white_tiles",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 1.27,
+  "mean": [
+   0.6128,
+   0.5673,
+   0.4685
+  ]
+ },
+ "tile_floor": {
+  "src": "ph:large_floor_tiles_02",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 3.0,
+  "mean": [
+   0.1802,
+   0.1834,
+   0.1716
+  ]
+ },
+ "wood_planks": {
+  "src": "ph:weathered_planks",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.0803,
+   0.0569,
+   0.0433
+  ]
+ },
+ "wood_floor": {
+  "src": "ph:wood_floor",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.7,
+  "mean": [
+   0.2163,
+   0.1165,
+   0.0548
+  ]
+ },
+ "wood_dark": {
+  "src": "ph:dark_wooden_planks",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.0869,
+   0.0683,
+   0.0495
+  ]
+ },
+ "plywood": {
+  "src": "ph:plywood",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 0.5,
+  "mean": [
+   0.2102,
+   0.1195,
+   0.0524
+  ]
+ },
+ "parquet": {
+  "src": "ph:herringbone_parquet",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 3.4,
+  "mean": [
+   0.2923,
+   0.1621,
+   0.0745
+  ]
+ },
+ "metal_plate": {
+  "src": "ph:metal_plate",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 0.5,
+  "mean": [
+   0.0479,
+   0.0325,
+   0.0118
+  ]
+ },
+ "metal_rust": {
+  "src": "ph:rust_coarse_01",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.2,
+  "mean": [
+   0.1253,
+   0.042,
+   0.0144
+  ]
+ },
+ "corrugated": {
+  "src": "ph:corrugated_iron",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.12,
+  "mean": [
+   0.4007,
+   0.4489,
+   0.4263
+  ]
+ },
+ "corrugated_rust": {
+  "src": "ph:rusty_corrugated_iron",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.0967,
+   0.0225,
+   0.0094
+  ]
+ },
+ "container": {
+  "src": "ph:container_side",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.94,
+  "mean": [
+   0.1089,
+   0.2477,
+   0.081
+  ]
+ },
+ "gravel": {
+  "src": "ph:gravel_floor",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.25,
+  "mean": [
+   0.362,
+   0.2376,
+   0.1296
+  ]
+ },
+ "dirt": {
+  "src": "ph:dry_ground_rocks",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 4.0,
+  "mean": [
+   0.3003,
+   0.1738,
+   0.0771
+  ]
+ },
+ "grass": {
+  "src": "ph:leafy_grass",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.3104,
+   0.2289,
+   0.1005
+  ]
+ },
+ "sand": {
+  "src": "ph:coast_sand_01",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 15.0,
+  "mean": [
+   0.2233,
+   0.1701,
+   0.1058
+  ]
+ },
+ "snow": {
+  "src": "ph:snow_02",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.3781,
+   0.3778,
+   0.3879
+  ]
+ },
+ "rock": {
+  "src": "ph:rock_wall_02",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.1014,
+   0.0757,
+   0.0375
+  ]
+ },
+ "mud": {
+  "src": "ph:brown_mud_02",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.3,
+  "mean": [
+   0.0754,
+   0.0591,
+   0.0391
+  ]
+ },
+ "cobblestone": {
+  "src": "ph:cobblestone_floor_08",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 2.0,
+  "mean": [
+   0.2935,
+   0.2671,
+   0.2227
+  ]
+ },
+ "marble": {
+  "src": "ph:marble_01",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.5,
+  "mean": [
+   0.4427,
+   0.3371,
+   0.194
+  ]
+ },
+ "carpet": {
+  "src": "ph:dirty_carpet",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 0.6,
+  "mean": [
+   0.0356,
+   0.0284,
+   0.0184
+  ]
+ },
+ "fabric": {
+  "src": "ph:rough_linen",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 0.271,
+  "mean": [
+   0.284,
+   0.4082,
+   0.6123
+  ]
+ },
+ "burlap": {
+  "src": "ph:hessian_230",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 0.269,
+  "mean": [
+   0.2634,
+   0.1881,
+   0.1004
+  ]
+ },
+ "roof_tiles": {
+  "src": "ph:clay_roof_tiles_02",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "disp",
+   "nor"
+  ],
+  "size": 2.5,
+  "mean": [
+   0.2952,
+   0.0818,
+   0.025
+  ]
+ },
+ "wood_siding": {
+  "src": "ph:weathered_plank_siding",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": 1.57,
+  "mean": [
+   0.0724,
+   0.0471,
+   0.0322
+  ]
+ },
+ "painted_metal": {
+  "src": "acg:PaintedMetal004",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.9216,
+   0.0577,
+   0.0565
+  ]
+ },
+ "steel": {
+  "src": "acg:Metal009",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.2908,
+   0.2973,
+   0.3146
+  ]
+ },
+ "hazard": {
+  "src": "acg:PaintedMetal016",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.2049,
+   0.1287,
+   0.0055
+  ]
+ },
+ "rubber": {
+  "src": "acg:Rubber004",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.0235,
+   0.0244,
+   0.0313
+  ]
+ },
+ "cardboard": {
+  "src": "acg:Cardboard004",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.4873,
+   0.2745,
+   0.074
+  ]
+ },
+ "ceiling_tile": {
+  "src": "acg:OfficeCeiling001",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.909,
+   0.909,
+   0.909
+  ]
+ },
+ "grate": {
+  "src": "acg:MetalWalkway010",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor",
+   "opacity"
+  ],
+  "size": null,
+  "mean": [
+   0.0293,
+   0.0282,
+   0.0379
+  ]
+ },
+ "chainlink": {
+  "src": "acg:Fence003",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor",
+   "opacity"
+  ],
+  "size": null,
+  "mean": [
+   0.3322,
+   0.3411,
+   0.3528
+  ]
+ },
+ "leather": {
+  "src": "acg:Leather011",
+  "res": "1k",
+  "maps": [
+   "arm",
+   "diff",
+   "nor"
+  ],
+  "size": null,
+  "mean": [
+   0.0564,
+   0.0045,
+   0.0044
+  ]
+ }
+}

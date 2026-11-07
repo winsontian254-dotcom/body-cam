@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LIVE FIRE — materials preview</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b0c0e; color: #d7dade; font: 12px/1.35 system-ui, sans-serif; overflow: hidden; }
+  #c { width: 100%; height: 100%; display: block; outline: none; }
+  #bar { position: fixed; left: 8px; top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; background: rgba(10,12,14,.72);
+         padding: 6px 8px; border-radius: 6px; max-width: calc(100% - 32px); z-index: 2; }
+  #bar label { display: flex; gap: 4px; align-items: center; }
+  #bar select, #bar button { background: #1b1e22; color: #d7dade; border: 1px solid #333a42; border-radius: 4px; padding: 2px 6px; font: inherit; }
+  #labels { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  #labels div { position: absolute; transform: translate(-50%, 0); font: 600 11px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; }
+  #stats { position: fixed; right: 8px; bottom: 8px; background: rgba(10,12,14,.72); padding: 4px 8px; border-radius: 6px; z-index: 2; white-space: pre; font: 11px/1.3 ui-monospace, monospace; }
+  body.clean #bar, body.clean #stats { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="bar">
+  <label>scene <select id="s-scene"><option>grid</option><option>street</option><option>hdri</option><option>all</option></select></label>
+  <label>page <select id="s-page"></select></label>
+  <label>hdri <select id="s-hdri"></select></label>
+  <label>weather <select id="s-weather"><option>clear</option><option>rain</option><option>snow</option><option>fog</option><option>dust</option></select></label>
+  <label>quality <select id="s-q"><option>low</option><option selected>medium</option><option>high</option><option>ultra</option></select></label>
+  <label>lens <select id="s-lens"><option>full</option><option>subtle</option><option>off</option></select></label>
+  <button id="b-flash">flash</button><button id="b-dmg">damage</button>
+</div>
+<div id="stats"></div>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.31.0/babylon.js"></script>
+<script type="module">
+/* Preview of every LIVE FIRE material, the HDRIs and a street-corner test scene through the full pipeline + lens.
+   URL: tools/preview/materials.html?scene=grid|street|hdri|all&page=0&hdri=partly_cloudy&weather=clear&q=medium&lens=full
+        &time=day|dusk|night|indoor|overcast&clean (hide UI)&pos=x,y,z&look=x,y,z&noui
+   window.PV = { ready (Promise), info(), stats(), materials, setFlash(k), setDamage(k), setADS(k), camera, scene, env, fx } */
+import { MATERIALS, initMaterials, getMaterial, textureStats, whenMaterialsReady } from '../../js/gfx/materials.js';
+import { applyEnvironment, HDRIS } from '../../js/gfx/env.js';
+import { createPipeline } from '../../js/gfx/postfx.js';
+import { applyQuality, QUALITY } from '../../js/gfx/quality.js';
+import { World } from '../../js/phys/world.js';
+
+const P = new URLSearchParams(location.search);
+const cfg = {
+  scene: P.get('scene') || 'grid', page: +(P.get('page') || 0), hdri: P.get('hdri') || '', weather: P.get('weather') || 'clear',
+  q: P.get('q') || 'medium', lens: P.get('lens') || 'full', time: P.get('time') || '', rot: P.has('rot') ? +P.get('rot') : undefined,
+  exposure: +(P.get('exposure') || 1), sun: P.get('sun') ? P.get('sun').split(',').map(Number) : null,
+};
+if (P.has('clean')) document.body.classList.add('clean');
+const PER_PAGE = 12;
+const names = Object.keys(MATERIALS);
+const pages = Math.ceil(names.length / PER_PAGE);
+const $ = id => document.getElementById(id);
+for (let i = 0; i < pages; i++) $('s-page').append(new Option(String(i), String(i)));
+for (const h of Object.keys(HDRIS)) $('s-hdri').append(new Option(h, h));
+$('s-hdri').prepend(new Option('(auto)', ''));
+$('s-scene').value = cfg.scene; $('s-page').value = String(cfg.page); $('s-hdri').value = cfg.hdri; $('s-weather').value = cfg.weather;
+$('s-q').value = cfg.q; $('s-lens').value = cfg.lens;
+for (const id of ['s-scene', 's-page', 's-hdri', 's-weather', 's-q', 's-lens']) $(id).onchange = () => {
+  const u = new URLSearchParams(location.search);
+  u.set('scene', $('s-scene').value); u.set('page', $('s-page').value); u.set('hdri', $('s-hdri').value); u.set('weather', $('s-weather').value);
+  u.set('q', $('s-q').value); u.set('lens', $('s-lens').value); location.search = u.toString();
+};
+
+const canvas = $('c');
+const engine = new BABYLON.Engine(canvas, false, { stencil: true, antialias: false, preserveDrawingBuffer: true, adaptToDeviceRatio: false });
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+applyQuality(engine, scene, cfg.q);
+engine.setHardwareScalingLevel(1);
+
+// ---- helpers: boxes / spheres with world-scale UVs (metres), like the map builder ---------------------------------------
+// World-anchored box mapping in texture tiles (metres / MATERIALS[mat].scale), exactly like js/maps/builder.js: a face uses
+// the two world axes it spans (u horizontal, v = world y on walls), so boxes that touch continue the texture without seams.
+function worldUV(m, mat) {
+  const k = 1 / ((MATERIALS[mat] && MATERIALS[mat].scale) || 2);   // UVs in texture tiles, like builder.js
+  m.computeWorldMatrix(true);
+  const P = m.getVerticesData('position'), N = m.getVerticesData('normal'), W = m.getWorldMatrix(), uv = new Float32Array(P.length / 3 * 2);
+  const p = new BABYLON.Vector3(), n = new BABYLON.Vector3();
+  for (let i = 0; i < P.length / 3; i++) {
+    BABYLON.Vector3.TransformCoordinatesFromFloatsToRef(P[i * 3], P[i * 3 + 1], P[i * 3 + 2], W, p);
+    BABYLON.Vector3.TransformNormalFromFloatsToRef(N[i * 3], N[i * 3 + 1], N[i * 3 + 2], W, n);
+    const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+    if (ay >= ax && ay >= az) { uv[i * 2] = p.x * k; uv[i * 2 + 1] = p.z * k * Math.sign(n.y || 1); }
+    else if (ax >= az) { uv[i * 2] = -p.z * k * Math.sign(n.x); uv[i * 2 + 1] = p.y * k; }
+    else { uv[i * 2] = p.x * k * Math.sign(n.z); uv[i * 2 + 1] = p.y * k; }
+  }
+  m.setVerticesData('uv', uv);
+}
+function box(name, x, y, z, w, h, d, mat, o = {}) {
+  const m = BABYLON.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+  m.position.set(x, y + h / 2, z); if (o.ry) m.rotation.y = o.ry;
+  worldUV(m, mat);
+  m.material = getMaterial(scene, mat); m.receiveShadows = true; casters.push(m);
+  if (o.solid !== false) world.addBox({ cx: x, cy: y + h / 2, cz: z, hx: w / 2, hy: h / 2, hz: d / 2, ry: o.ry || 0, surf: 'concrete' });
+  return m;
+}
+function sphere(name, x, y, z, r, mat) {
+  const m = BABYLON.MeshBuilder.CreateSphere(name, { diameter: r * 2, segments: 48 }, scene);
+  const k = 1 / ((MATERIALS[mat] && MATERIALS[mat].scale) || 2);
+  const uv = m.getVerticesData('uv'); for (let i = 0; i < uv.length; i += 2) { uv[i] *= 2 * Math.PI * r * k; uv[i + 1] *= Math.PI * r * k; }
+  m.setVerticesData('uv', uv); m.position.set(x, y + r, z); m.material = getMaterial(scene, mat); m.receiveShadows = true; casters.push(m);
+  return m;
+}
+function cyl(name, x, y, z, r, h, mat) {
+  const m = BABYLON.MeshBuilder.CreateCylinder(name, { diameter: r * 2, height: h, tessellation: 32 }, scene);
+  const k = 1 / ((MATERIALS[mat] && MATERIALS[mat].scale) || 2);
+  const uv = m.getVerticesData('uv'); for (let i = 0; i < uv.length; i += 2) { uv[i] *= 2 * Math.PI * r * k; uv[i + 1] *= h * k; }
+  m.setVerticesData('uv', uv); m.position.set(x, y + h / 2, z); m.material = getMaterial(scene, mat); m.receiveShadows = true; casters.push(m);
+  world.addCyl({ cx: x, cy: y + h / 2, cz: z, r, hy: h / 2 });
+  return m;
+}
+function plane(name, x, y, z, w, h, mat, ry = 0) {
+  const k = 1 / ((MATERIALS[mat] && MATERIALS[mat].scale) || 2);
+  const m = BABYLON.MeshBuilder.CreatePlane(name, { width: w, height: h, frontUVs: new BABYLON.Vector4(0, 0, w * k, h * k), backUVs: new BABYLON.Vector4(0, 0, w * k, h * k), sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+  m.position.set(x, y + h / 2, z); m.rotation.y = ry; m.material = getMaterial(scene, mat); m.receiveShadows = true; casters.push(m);
+  return m;
+}
+const casters = [], labels = [];
+const world = new World();
+function label(text, pos) { const d = document.createElement('div'); d.textContent = text; $('labels').append(d); labels.push({ d, pos }); }
+
+// ---- scenes -------------------------------------------------------------------------------------------------------------------
+const camera = new BABYLON.UniversalCamera('cam', new BABYLON.Vector3(0, 1.64, -6), scene);
+camera.minZ = .05; camera.maxZ = 1500; camera.speed = .25; camera.angularSensibility = 2500;
+camera.attachControl(canvas, true);
+const setFov = () => { const a = engine.getRenderWidth() / engine.getRenderHeight(); camera.fov = 2 * Math.atan(Math.tan(Math.PI / 4) / Math.max(.5, a) * 1.0); };
+setFov();
+let envDef = {};
+
+function buildGrid() {
+  const list = names.slice(cfg.page * PER_PAGE, cfg.page * PER_PAGE + PER_PAGE);
+  const cols = 4;
+  box('floor', 0, -.1, 3.5, 30, .1, 20, 'concrete_floor');
+  list.forEach((n, i) => {
+    const cx = (i % cols - (cols - 1) / 2) * 3.2, cz = Math.floor(i / cols) * 3.4;
+    box('pad_' + n, cx, 0, cz, 2.6, .02, 2.6, n, { solid: false });
+    sphere('sph_' + n, cx - .62, .02, cz - .1, .5, n);
+    box('box_' + n, cx + .62, .02, cz - .1, .9, .9, .9, n, { ry: .5 });
+    label(n, new BABYLON.Vector3(cx, 1.45, cz - .1));
+  });
+  camera.position.set(0, 4.2, -6.2); camera.setTarget(new BABYLON.Vector3(0, .3, 3.4));
+  envDef = { time: cfg.time || 'day', weather: cfg.weather, hdri: cfg.hdri || 'partly_cloudy', sun: { dir: [-.38, -.62, .68] } };
+}
+function buildAll() {   // every material at once: a contact sheet and the load test of tools/test/gfx.mjs
+  const cols = 12;
+  box('floor', 0, -.1, 6, 40, .1, 26, 'concrete_floor');
+  names.forEach((n, i) => {
+    const cx = (i % cols - (cols - 1) / 2) * 1.5, cz = Math.floor(i / cols) * 1.9;
+    sphere('s_' + n, cx, 0, cz, .55, n);
+    label(n, new BABYLON.Vector3(cx, 1.25, cz));
+  });
+  camera.position.set(0, 7.5, -7.5); camera.setTarget(new BABYLON.Vector3(0, 0, 4.6));
+  envDef = { time: cfg.time || 'day', weather: cfg.weather, hdri: cfg.hdri || 'overcast' };
+}
+function buildHdri() {
+  box('floor', 0, -.1, 0, 16, .1, 16, 'concrete_floor');
+  const chrome = BABYLON.MeshBuilder.CreateSphere('chrome', { diameter: 1.2, segments: 48 }, scene);
+  const cm = new BABYLON.PBRMaterial('chrome', scene); cm.metallic = 1; cm.roughness = .02; cm.albedoColor = new BABYLON.Color3(.95, .95, .95); chrome.material = cm;
+  chrome.position.set(-1.6, .6, 0); casters.push(chrome);
+  const white = BABYLON.MeshBuilder.CreateSphere('white', { diameter: 1.2, segments: 48 }, scene);
+  const wm = new BABYLON.PBRMaterial('white', scene); wm.metallic = 0; wm.roughness = .9; wm.albedoColor = new BABYLON.Color3(.7, .7, .7); white.material = wm;
+  white.position.set(0, .6, 0); casters.push(white); white.receiveShadows = true;
+  sphere('brick', 1.6, 0, 0, .6, 'brick_red');
+  box('wall', 0, 0, 2.2, 6, 2.2, .3, 'concrete');
+  box('crate', -3.2, 0, 1, 1, 1, 1, 'plywood', { ry: .4 });
+  camera.position.set(0, 1.5, -5.2); camera.setTarget(new BABYLON.Vector3(0, 1.1, 0));
+  envDef = { time: cfg.time || 'day', weather: cfg.weather, hdri: cfg.hdri || 'partly_cloudy' };
+}
+function buildStreet() {
+  // road along x, kerb + pavement, a brick building with a shop front, a concrete side building, props
+  world.setGround({ minX: -60, maxX: 60, minZ: -60, maxZ: 60, res: 4, heights: new Float32Array(31 * 31), surf: 'asphalt' });
+  box('road', 0, -.2, -2, 60, .2, 14, 'asphalt');
+  box('kerb', 0, 0, 5.1, 60, .15, .22, 'concrete');
+  box('pave', 0, 0, 7.6, 60, .15, 4.8, 'pavement');
+  box('pave2', -9.6, 0, -2, 4.8, .15, 14, 'pavement');
+  box('kerb2', -7.1, 0, -2, .22, .15, 14, 'concrete');
+  for (let x = -26; x < 30; x += 6) box('mark' + x, x, 0, -2, 3, .005, .14, 'paint_white', { solid: false });
+  box('drain', 3.5, 0, 4.7, .9, .012, .45, 'grate', { solid: false });
+  // brick building (z 10..18), ground floor plaster band with shop window and a metal door
+  const bz = 10, by = .15;
+  box('bwall_l', -4, by, bz, 6, 7, .3, 'brick_red');
+  box('bwall_r', 7.5, by, bz, 9, 7, .3, 'brick_red');
+  box('bwall_top', 1.8, by + 3, bz, 5.6, 4, .3, 'brick_red');
+  box('bplinth', 1.8, by, bz - .02, 5.6, .5, .34, 'concrete_dark');
+  box('bglass', 1.0, by + .5, bz, 3.4, 2.5, .04, 'glass', { solid: false });
+  box('bframe_t', 1.0, by + 2.95, bz - .02, 3.6, .1, .12, 'steel_dark'); box('bframe_b', 1.0, by + .45, bz - .02, 3.6, .1, .12, 'steel_dark');
+  box('bframe_l', -.75, by + .5, bz - .02, .1, 2.5, .12, 'steel_dark'); box('bframe_m', 1.0, by + .5, bz - .02, .06, 2.5, .1, 'steel_dark');
+  box('door', 3.8, by, bz - .05, 1.1, 2.3, .08, 'metal_painted');
+  box('doorframe', 3.8, by + 2.3, bz - .05, 1.3, .1, .14, 'steel_dark');
+  box('awning', 3.8, by + 2.55, bz - .9, 1.8, .06, 1.6, 'corrugated');
+  box('sign', 1.0, by + 3.2, bz - .18, 3.2, .5, .06, 'paint_red', { solid: false });
+  box('roof', 2.0, by + 7, bz + 4, 21, .3, 8.3, 'concrete_dark');
+  box('bback', 2.0, by, bz + 8, 21, 7, .3, 'brick_red');
+  box('upper_win', -4, by + 4.2, bz - .02, 1.4, 1.6, .04, 'glass', { solid: false });
+  box('upper_win2', 7, by + 4.2, bz - .02, 1.4, 1.6, .04, 'glass', { solid: false });
+  box('interior_floor', 2.0, by, bz + 4, 20, .02, 7.6, 'tile_floor', { solid: false });
+  // side building (concrete + plaster), x < -12
+  box('side', -16, 0, 2, 8, 9, 22, 'concrete');
+  box('side_band', -12.0, .15, -4, .1, 1.2, 12, 'plaster', { solid: false });
+  // props
+  box('dumpster', 9, .15, 6.8, 2, 1.3, 1.1, 'paint_green');
+  box('dumpster_lid', 9, 1.45, 6.8, 2.04, .06, 1.14, 'paint_black');
+  box('pallet', 6.4, .15, 7.6, 1.2, .14, 1.0, 'wood_planks', { ry: .2 });
+  box('crate1', -2.6, .15, 7.8, .6, .45, .5, 'cardboard', { ry: .3 }); box('crate2', -2.3, .6, 7.8, .5, .4, .45, 'cardboard', { ry: -.2 });
+  cyl('barrel', 11, .15, 8.6, .3, .9, 'metal_rust');
+  box('barrier', -4, 0, 2.6, 2.4, .9, .5, 'hazard');
+  box('container', 18, 0, -3, 2.44, 2.59, 6.06, 'container_blue', { ry: 1.45 });
+  plane('fence', -9, 0, 13, 6, 2.2, 'chainlink');
+  cyl('pole', -6.2, .15, 5.6, .07, 4.6, 'steel_dark');
+  box('lamp', -5.8, 4.6, 5.6, .9, .12, .3, 'steel_dark', { solid: false });
+  box('lamp_glow', -5.8, 4.56, 5.6, .6, .04, .2, 'emissive_warm', { solid: false });
+  const pl = new BABYLON.PointLight('street', new BABYLON.Vector3(-5.8, 4.3, 5.6), scene); pl.diffuse = new BABYLON.Color3(1, .72, .45); pl.range = 16;
+  pl.intensity = 0;   // set after the env: only at night
+  scene._lfStreetLamp = pl;
+  world.build();
+  camera.position.set(-1.5, 1.64, -6.5); camera.setTarget(new BABYLON.Vector3(3, 1.4, 9));
+  envDef = { time: cfg.time || 'day', weather: cfg.weather, hdri: cfg.hdri || undefined, sun: { dir: [-.62, -.55, .56] } };
+}
+
+const t0 = performance.now();
+await initMaterials(scene, { quality: cfg.q });
+if (cfg.scene === 'street') buildStreet(); else if (cfg.scene === 'hdri') buildHdri(); else if (cfg.scene === 'all') buildAll(); else buildGrid();
+if (cfg.rot !== undefined) envDef.rotation = cfg.rot;
+if (cfg.exposure !== 1) envDef.exposure = cfg.exposure;
+if (cfg.sun) envDef.sun = { dir: cfg.sun };
+if (P.get('pos')) camera.position.fromArray(P.get('pos').split(',').map(Number));
+if (P.get('look')) camera.setTarget(BABYLON.Vector3.FromArray(P.get('look').split(',').map(Number)));
+const env = await applyEnvironment(scene, envDef, { quality: cfg.q, camera, world: cfg.scene === 'street' ? world : null });
+if (env.shadow) for (const m of casters) if (m.material && !m.material.needAlphaBlending()) env.shadow.addShadowCaster(m);
+if (scene._lfStreetLamp) scene._lfStreetLamp.intensity = env.kind === 'night' || env.time === 'indoor' ? 18 : 0;   // absolute scene units (see env.js TARGET)
+const fx = createPipeline(scene, camera, { quality: cfg.q, lens: cfg.lens });
+const tReady = performance.now();
+await whenMaterialsReady(scene);
+await scene.whenReadyAsync();
+const loadMs = performance.now() - t0;
+$('b-flash').onclick = () => { let k = 1.3; const f = () => { fx.setFlash(k); k -= .012; if (k > 0) requestAnimationFrame(f); else fx.setFlash(0); }; f(); };
+$('b-dmg').onclick = () => { let k = 1; const f = () => { fx.setDamage(k); k -= .02; if (k > 0) requestAnimationFrame(f); else fx.setDamage(0); }; f(); };
+
+let frames = 0;
+engine.runRenderLoop(() => {
+  scene.render(); frames++;
+  if (labels.length) for (const l of labels) {
+    const p = BABYLON.Vector3.Project(l.pos, BABYLON.Matrix.Identity(), scene.getTransformMatrix(), camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()));
+    const k = canvas.clientWidth / engine.getRenderWidth();
+    l.d.style.left = (p.x * k) + 'px'; l.d.style.top = (p.y * k) + 'px'; l.d.style.display = p.z > 0 && p.z < 1 ? '' : 'none';
+  }
+  if ((frames & 15) === 0) {
+    const ts = textureStats(scene);
+    $('stats').textContent = `${cfg.scene} ${cfg.q} lens ${cfg.lens} hdri ${env.hdri}\n` +
+      `${engine.getFps().toFixed(0)} fps  ${ts.materials} mats  ${ts.textures} tex  ${(ts.bytes / 1048576).toFixed(0)} MB est\nload ${loadMs.toFixed(0)} ms` + (ts.failed.length ? `\nFAILED ${ts.failed.length}` : '');
+  }
+});
+window.addEventListener('resize', () => { engine.resize(); setFov(); });
+window.PV = { scene, engine, camera, env, fx, materials: names, ready: Promise.resolve(true), loadMs, envReadyMs: tReady - t0,
+  stats: () => Object.assign(textureStats(scene), { env: env.stats(), fx: fx.info(), frames, loadMs }),
+  setFlash: k => fx.setFlash(k), setDamage: k => fx.setDamage(k), setADS: k => fx.setADS(k) };
+window.PV_READY = true;
+</script>
+</body>
+</html>

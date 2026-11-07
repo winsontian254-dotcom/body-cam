@@ -23,7 +23,11 @@ read it before changing anything, and update it in the same change when a contra
 
 ## Testing
 - `node tools/serve.mjs 8080` serves the repo; `tools/test/lib.mjs` has `startServer`, `launch`, `openGame`, `waitFor`, `shot`, `errors`.
-- Dev hash: `#dev&map=<id>&mode=<id>&bots=<n>&team=1|2&q=low&autostart&seed=<n>&nolens&peer=host:port`.
+- Dev hash: `#dev&map=<id>&mode=<id>&bots=<n>&team=1|2&q=low&autostart&seed=<n>&nolens&peer=host:port` (`&sandbox` walks a map
+  with the movement code, `&nodyn` fixes the resolution for screenshots). `node tools/test/phys.mjs` = physics/nav unit tests,
+  `node tools/test/mapcheck.mjs <id> --shots` = build + validate + overview shots of a map.
+- `node tools/test/match.mjs` plays real matches through `LF.game.debugStep` (TDM / FFA / combat rules / menu flow); `#dev&...&autostart`
+  starts a match from the dev hash (`&botmode=static` for target practice, `&freeze=0`, `&score=n`).
 - Screenshots go to `tools/test/out/` (git-ignored).
 
 ## Deploy

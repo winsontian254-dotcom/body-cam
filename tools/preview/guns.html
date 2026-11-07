@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LIVE FIRE — gun preview</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #6f7175; color: #e4e6ea; font: 12px/1.35 system-ui, sans-serif; overflow: hidden; }
+  #c { width: 100%; height: 100%; display: block; outline: none; }
+  #bar { position: fixed; left: 8px; top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; background: rgba(16,18,22,.72);
+         padding: 6px 8px; border-radius: 6px; max-width: calc(100% - 32px); z-index: 2; }
+  #bar select, #bar button, #bar input { background: #1b1e22; color: #e4e6ea; border: 1px solid #39404a; border-radius: 4px; padding: 2px 6px; font: inherit; }
+  #info { position: fixed; right: 8px; bottom: 8px; background: rgba(16,18,22,.72); padding: 4px 8px; border-radius: 6px; z-index: 2; white-space: pre; font: 11px/1.3 ui-monospace, monospace; }
+  #labels { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  #labels div { position: absolute; transform: translate(-50%, 0); font: 600 12px/1.2 system-ui, sans-serif; color: #f2f3f5; text-shadow: 0 1px 2px #000; white-space: nowrap; text-align: center; }
+  #labels div small { display: block; font-weight: 400; opacity: .8; font-size: 10px; }
+  body.clean #bar, body.clean #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="bar">
+  <select id="s-gun"></select>
+  <select id="s-skin"></select>
+  <select id="s-lod"><option value="0">LOD 0</option><option value="1">LOD 1</option><option value="2">LOD 2</option></select>
+  <select id="s-view"><option>34</option><option>side</option><option>left</option><option>rear34</option><option>close</option><option>top</option><option>front</option><option>fp</option></select>
+  <input id="s-mods" placeholder="mods: o_reflex,m_supp_9" size="22">
+  <select id="s-sheet"><option value="">single</option><option>pistol</option><option>smg</option><option>shotgun</option><option>lmg</option><option>modelled</option><option>all</option></select>
+  <button id="b-wire">wire</button>
+</div>
+<div id="info"></div>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.31.0/babylon.js"></script>
+<script type="module">
+/* Studio preview of the procedural gun models (js/weapons/models.js).
+   URL: tools/preview/guns.html?gun=<id>&skin=<id>&mods=o_reflex,m_supp_9&lod=0|1|2&view=34|side|left|rear34|close|top|front|fp
+        &yaw=<rad>&pitch=<rad>&dist=<m>&fov=<rad>&sheet=pistol|smg|shotgun|lmg|modelled|all&clean&w=&h=&env=warehouse&bg=hex&wire
+        &nade=<grenade id> (single grenade), &grid=melee|nades
+   window.GV = { ready, show(id, opts) -> info, view(name, o), sheet(list), grid(entries, opts), stats(), scene, engine, camera, gm }
+   grid entries: [{ id, mods: { slot: attId }, nade: bool, lod, skin, label, sub, yaw }]: each model scaled to fit its cell, labelled */
+import { buildGun, initGunKit, SKINS, MODEL_SPECS, gunTris } from '../../js/weapons/models.js';
+import { GUNS, MELEE, getGun } from '../../js/weapons/data.js';
+import { buildNade, nadeTris } from '../../js/grenades/models.js';
+import { getNade } from '../../js/grenades/data.js';
+
+const Q = new URLSearchParams(location.search), $ = id => document.getElementById(id);
+if (Q.has('clean')) document.body.classList.add('clean');
+const canvas = $('c');
+const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, antialias: true }, true);
+engine.setHardwareScalingLevel(1 / Math.min(2, +(Q.get('dpr') || 1)));
+const scene = new BABYLON.Scene(engine);
+const bg = BABYLON.Color3.FromHexString('#' + (Q.get('bg') || '6a6c70'));
+scene.clearColor = new BABYLON.Color4(bg.r, bg.g, bg.b, 1);
+scene.ambientColor = new BABYLON.Color3(0, 0, 0);
+const ip = scene.imageProcessingConfiguration;
+ip.toneMappingEnabled = true; ip.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = +(Q.get('exposure') || 1.05); ip.contrast = 1.12;
+// environment: CC0 HDRI from assets/hdri (graphics worker) for reflections; studio lights for shape
+const envName = Q.get('env') || 'overcast';
+try { const env = BABYLON.CubeTexture.CreateFromPrefilteredData('../../assets/hdri/' + envName + '.env', scene); env.rotationY = 2.2; scene.environmentTexture = env; scene.environmentIntensity = +(Q.get('envk') || 1.0); } catch (e) { console.warn('env', e); }
+const key = new BABYLON.DirectionalLight('key', new BABYLON.Vector3(-.45, -.8, .35), scene); key.intensity = 3.4; key.diffuse = new BABYLON.Color3(1, .96, .9); key.position = new BABYLON.Vector3(2, 3, -2);
+const rim = new BABYLON.DirectionalLight('rim', new BABYLON.Vector3(.5, -.35, -.8), scene); rim.intensity = 3.0; rim.diffuse = new BABYLON.Color3(.8, .88, 1);
+const top = new BABYLON.DirectionalLight('top', new BABYLON.Vector3(.15, -1, .1), scene); top.intensity = 1.6; top.diffuse = new BABYLON.Color3(1, 1, 1);
+const fill = new BABYLON.HemisphericLight('fill', new BABYLON.Vector3(0, 1, 0), scene); fill.intensity = .45; fill.groundColor = new BABYLON.Color3(.25, .25, .27);
+// studio sweep: a bowl (flat floor curving up into a wall all round), so every view has a seamless backdrop
+const FLOOR = -.2;
+const cyc = (() => {
+  const shape = [new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(2.4, 0, 0)];
+  for (let k = 1; k <= 18; k++) { const a = k / 18 * Math.PI / 2; shape.push(new BABYLON.Vector3(2.4 + Math.sin(a) * 2.2, (1 - Math.cos(a)) * 2.2, 0)); }
+  shape.push(new BABYLON.Vector3(4.6, 9, 0));
+  const m = BABYLON.MeshBuilder.CreateLathe('cyc', { shape, tessellation: 64, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+  m.position.y = FLOOR;
+  const mat = new BABYLON.PBRMaterial('cycm', scene); mat.albedoColor = new BABYLON.Color3(.11, .112, .118); mat.metallic = 0; mat.roughness = 1; mat.environmentIntensity = .5; m.material = mat; m.receiveShadows = true; m.isPickable = false;
+  return m;
+})();
+const sg = new BABYLON.ShadowGenerator(2048, key); sg.usePercentageCloserFiltering = true; sg.filteringQuality = BABYLON.ShadowGenerator.QUALITY_HIGH; sg.bias = .0004; sg.normalBias = .01; sg.darkness = .25;
+const cam = new BABYLON.ArcRotateCamera('cam', 0, 1.2, .8, BABYLON.Vector3.Zero(), scene); cam.minZ = .005; cam.maxZ = 60; cam.fov = +(Q.get('fov') || .5); cam.wheelPrecision = 400; cam.panningSensibility = 4000; cam.lowerRadiusLimit = .03;
+cam.attachControl(canvas, true);
+let pipe = null;
+try { pipe = new BABYLON.DefaultRenderingPipeline('pp', true, scene, [cam]); pipe.samples = 4; pipe.fxaaEnabled = true; pipe.imageProcessingEnabled = false; } catch (e) { console.warn('pipeline', e); }
+
+const GV = window.GV = { scene, engine, camera: cam, gm: null, models: [] };
+let current = { id: Q.get('gun') || 'vogt9', skin: Q.get('skin') || 'factory', lod: +(Q.get('lod') || 0), mods: parseMods(Q.get('mods')), view: Q.get('view') || '34' };
+function parseMods(s) { const out = {}; if (!s) return out; for (const id of s.split(',').filter(Boolean)) { const slot = { o: 'optic', m: 'muzzle', u: 'under', s: 'side', g: 'mag', k: 'stock', b: 'barrel' }[id[0]]; if (slot) out[slot] = id; } return out; }
+function bounds(gm) {
+  let mn = new BABYLON.Vector3(1e9, 1e9, 1e9), mx = mn.scale(-1);
+  gm.root.computeWorldMatrix(true);
+  for (const m of gm.root.getChildMeshes(false)) { if (!m.isEnabled() || !m.getTotalVertices()) continue; m.computeWorldMatrix(true); const b = m.getBoundingInfo().boundingBox; mn = BABYLON.Vector3.Minimize(mn, b.minimumWorld); mx = BABYLON.Vector3.Maximize(mx, b.maximumWorld); }
+  return { mn, mx, c: mn.add(mx).scale(.5), size: mx.subtract(mn) };
+}
+function clear() { for (const m of GV.models) m.dispose(); GV.models = []; $('labels').innerHTML = ''; }
+const isNade = id => !getGun(id) && !!getNade(id);
+const tris = gm => (gm.nade ? nadeTris(gm) : gunTris(gm));
+GV.show = (id, o = {}) => {
+  clear(); cyc.setEnabled(true); current = { ...current, id, ...o };
+  const t0 = performance.now();
+  const gm = isNade(id) ? buildNade(scene, id, { lod: current.lod }) : buildGun(scene, id, { lod: current.lod, skin: current.skin, mods: current.mods });
+  if (gm.nade) { gm.parts = gm.parts || {}; gm.sockets = {}; gm.mods = {}; }
+  const ms = performance.now() - t0;
+  GV.gm = gm; GV.models.push(gm);
+  for (const m of gm.root.getChildMeshes(false)) sg.addShadowCaster(m, false);
+  const b = bounds(gm);
+  gm.root.position.subtractInPlace(b.c); gm.root.position.y += FLOOR + b.size.y / 2 + .025;
+  GV.view(current.view, o);
+  const info = { id, name: (getGun(id) || getNade(id)).name, tris: tris(gm), meshes: gm.meshes.length, buildMs: +ms.toFixed(1), tplMs: +(gm.info.buildMs || 0).toFixed(1), cached: gm.info.cached,
+    size: [b.size.x, b.size.y, b.size.z].map(v => +(v * 1000).toFixed(1)), parts: Object.keys(gm.parts), sockets: Object.keys(gm.sockets), mods: gm.mods };
+  $('info').textContent = `${info.name} (${id})  lod ${current.lod}  ${info.tris} tris  ${info.meshes} meshes  build ${info.buildMs} ms\nsize mm ${info.size.join(' x ')}\nparts ${info.parts.join(' ')}\nsockets ${info.sockets.join(' ')}`;
+  return info;
+};
+GV.view = (name = current.view, o = {}) => {
+  current.view = name; const gm = GV.gm; if (!gm) return;
+  const b = bounds(gm), L = Math.max(b.size.z, b.size.y * 1.7), fit = L / 2 / Math.tan(cam.fov / 2) * 1.12;
+  const V = {
+    side: [0, Math.PI / 2, 1.0], left: [Math.PI, Math.PI / 2, 1.0], '34': [.78, 1.18, 1.05], rear34: [-.85, 1.12, 1.0], front: [Math.PI / 2, 1.5, .9],
+    top: [0, .02, 1.0], close: [.55, 1.25, .26], fp: [-1.42, 1.36, .62], under: [.6, 2.2, 1.0],
+  }[name] || [0, 1.2, 1];
+  // the target first: setting ArcRotateCamera.target rebuilds alpha / beta / radius from the current position
+  cam.target = o.target ? BABYLON.Vector3.FromArray(o.target) : name === 'close' ? closeTarget(gm, b) : name === 'fp' ? b.c.add(new BABYLON.Vector3(0, b.size.y * .25, b.size.z * .1)) : b.c;
+  cam.alpha = o.yaw ?? (+Q.get('yaw') || V[0]); cam.beta = o.pitch ?? (+Q.get('pitch') || V[1]); cam.radius = o.dist ?? (+Q.get('dist') || fit * V[2]);
+};
+function closeTarget(gm, b) { const e = gm.eject; if (!e) return b.c; e.computeWorldMatrix(true); const p = e.getAbsolutePosition(); return new BABYLON.Vector3(b.c.x, p.y - .01, p.z - .02); }
+GV.sheet = (list, o = {}) => {
+  clear(); cyc.setEnabled(false);
+  const ids = list === 'modelled' ? Object.keys(MODEL_SPECS) : list === 'all' ? GUNS.map(g => g.id) : GUNS.filter(g => g.cat === list).map(g => g.id);
+  const gms = ids.map(id => { const gm = buildGun(scene, id, { lod: current.lod, skin: current.skin }); GV.models.push(gm); for (const m of gm.root.getChildMeshes(false)) sg.addShadowCaster(m, false); return gm; });
+  const bs = gms.map(bounds), maxZ = Math.max(...bs.map(b => b.size.z)), maxY = Math.max(...bs.map(b => b.size.y));
+  const aspect = engine.getAspectRatio(cam), cellW = o.cellW || maxZ * 1.08, cellH = o.cellH || maxY * 1.42;
+  let cols = o.cols || 1; while (!o.cols && Math.ceil(ids.length / cols) * cellH * aspect > cols * cellW && cols < ids.length) cols++;
+  const rows = Math.ceil(ids.length / cols);
+  // right side towards a camera on +X: muzzle to the right, columns along +Z, rows along Y
+  gms.forEach((gm, k) => { const b = bs[k], c = k % cols, r = Math.floor(k / cols);
+    gm.root.position.set(-b.c.x, (rows - 1 - r - (rows - 1) / 2) * cellH - b.c.y + cellH * .08, (c - (cols - 1) / 2) * cellW - b.c.z);
+    gm.root.metadata = { ...(gm.root.metadata || {}), label: getGun(ids[k]).name, id: ids[k] }; });
+  cam.target = new BABYLON.Vector3(0, 0, 0); cam.alpha = 0; cam.beta = Math.PI / 2;   // target first (it rebuilds the angles)
+  cam.radius = Math.max(cols * cellW / aspect, rows * cellH) / 2 / Math.tan(cam.fov / 2) * 1.04;
+  GV.labels = () => {
+    $('labels').innerHTML = ''; const W = engine.getRenderWidth(), H = engine.getRenderHeight(), vp = cam.viewport.toGlobal(W, H);
+    for (const gm of GV.models) { const b = bounds(gm), p = BABYLON.Vector3.Project(new BABYLON.Vector3(b.c.x, b.mn.y, b.c.z), BABYLON.Matrix.Identity(), scene.getTransformMatrix(), vp);
+      const d = document.createElement('div'); d.style.left = (p.x * canvas.clientWidth / W) + 'px'; d.style.top = (p.y * canvas.clientHeight / H + 2) + 'px';
+      d.innerHTML = gm.root.metadata.label + '<small>' + gm.root.metadata.id + ' · ' + gunTris(gm) + ' tris</small>'; $('labels').append(d); }
+  };
+  scene.onAfterRenderObservable.addOnce(() => GV.labels());
+  return ids;
+};
+GV.grid = (entries, o = {}) => {
+  clear(); cyc.setEnabled(false);
+  const cols = o.cols || Math.ceil(Math.sqrt(entries.length * 1.6)), rows = Math.ceil(entries.length / cols), aspect = engine.getAspectRatio(cam);
+  const cellW = 1, cellH = o.cellH || .42, fill = o.fill || .86;
+  entries.forEach((e, k) => {
+    const gm = e.nade || isNade(e.id) ? buildNade(scene, e.id, { lod: e.lod ?? current.lod }) : buildGun(scene, e.id, { lod: e.lod ?? current.lod, skin: e.skin || current.skin, mods: e.mods || {} });
+    GV.models.push(gm); for (const m of gm.root.getChildMeshes(false)) sg.addShadowCaster(m, false);
+    if (e.yaw) gm.root.rotation.y = e.yaw;
+    const b0 = bounds(gm), sc = Math.min(cellW * fill / Math.max(b0.size.z, 1e-3), cellH * .8 / Math.max(b0.size.y, 1e-3));
+    gm.root.scaling.setAll(sc); const b = bounds(gm), c = k % cols, r = Math.floor(k / cols);
+    gm.root.position.set(gm.root.position.x - b.c.x, gm.root.position.y + (rows - 1 - r - (rows - 1) / 2) * cellH - b.c.y + cellH * .06, gm.root.position.z + (c - (cols - 1) / 2) * cellW - b.c.z);
+    gm.root.metadata = { ...(gm.root.metadata || {}), label: e.label || (getGun(e.id) || getNade(e.id)).name, sub: e.sub || (e.id + ' · ' + tris(gm) + ' tris') };
+  });
+  cam.target = new BABYLON.Vector3(0, 0, 0); cam.alpha = o.alpha ?? 0; cam.beta = o.beta ?? Math.PI / 2;
+  cam.radius = Math.max(cols * cellW / aspect, rows * cellH) / 2 / Math.tan(cam.fov / 2) * 1.04;
+  GV.labels = () => {
+    $('labels').innerHTML = ''; const W = engine.getRenderWidth(), H = engine.getRenderHeight(), vp = cam.viewport.toGlobal(W, H);
+    for (const gm of GV.models) { const b = bounds(gm), p = BABYLON.Vector3.Project(new BABYLON.Vector3(b.c.x, b.mn.y, b.c.z), BABYLON.Matrix.Identity(), scene.getTransformMatrix(), vp);
+      const d = document.createElement('div'); d.style.left = (p.x * canvas.clientWidth / W) + 'px'; d.style.top = (p.y * canvas.clientHeight / H + 2) + 'px';
+      d.innerHTML = gm.root.metadata.label + '<small>' + gm.root.metadata.sub + '</small>'; $('labels').append(d); }
+  };
+  scene.onAfterRenderObservable.addOnce(() => GV.labels());
+  return entries.length;
+};
+GV.stats = () => ({ tris: GV.models.reduce((n, g) => n + tris(g), 0), draws: scene.getActiveMeshes().length });
+GV.frames = (n = 2) => new Promise(r => { let k = 0; const ob = scene.onAfterRenderObservable.add(() => { if (++k >= n) { scene.onAfterRenderObservable.remove(ob); r(); } }); });
+
+// UI
+for (const g of GUNS) $('s-gun').append(new Option((MODEL_SPECS[g.id] ? '' : '· ') + g.name + ' (' + g.id + ')', g.id));
+for (const s of SKINS) $('s-skin').append(new Option(s.name, s.id));
+$('s-gun').value = current.id; $('s-skin').value = current.skin; $('s-lod').value = String(current.lod); $('s-view').value = current.view; $('s-mods').value = Q.get('mods') || '';
+$('s-gun').onchange = e => GV.show(e.target.value); $('s-skin').onchange = e => GV.show(current.id, { skin: e.target.value }); $('s-lod').onchange = e => GV.show(current.id, { lod: +e.target.value });
+$('s-view').onchange = e => GV.view(e.target.value); $('s-mods').onchange = e => GV.show(current.id, { mods: parseMods(e.target.value) });
+$('s-sheet').onchange = e => e.target.value ? GV.sheet(e.target.value) : GV.show(current.id);
+$('b-wire').onclick = () => { for (const m of scene.meshes) if (m.material && m.name !== 'cyc') m.material.wireframe = !m.material.wireframe; };
+if (Q.has('w')) { canvas.style.width = Q.get('w') + 'px'; canvas.style.height = (Q.get('h') || Q.get('w') * .5625) + 'px'; }
+engine.runRenderLoop(() => scene.render());
+window.addEventListener('resize', () => engine.resize());
+GV.ready = (async () => {
+  await initGunKit(scene);
+  if (Q.get('grid') === 'melee') GV.grid(MELEE.map(m => ({ id: m.id })), { cols: 3 });
+  else if (Q.get('grid') === 'nades') GV.grid((await import('../../js/grenades/data.js')).GRENADES.map(n => ({ id: n.id, nade: true })), { cols: 7, cellH: 1 });
+  else if (Q.get('nade')) GV.show(Q.get('nade'));
+  else if (Q.get('sheet')) GV.sheet(Q.get('sheet')); else GV.show(current.id);
+  await scene.whenReadyAsync();
+  await GV.frames(2);
+  if (Q.has('wire')) $('b-wire').onclick();
+  return true;
+})();
+</script>
+</body>
+</html>
