@@ -41,7 +41,7 @@ js/core/settings.js        settings store (lf_settings_v1), defaults, onChange
 js/core/events.js          tiny event bus class (Bus) + the app-wide bus `appBus`
 js/core/util.js            math helpers, clamp/lerp, seeded RNG (mulberry32), ids, formatters, DOM helper el()
 js/core/dev.js             parses location.hash dev params (#dev&map=..&mode=..&bots=..&q=low&autostart)
-js/phys/world.js           static collision world: boxes (AABB or Y-rotated), ramps, heightfield ground; BVH
+js/phys/world.js           (pure JS, no BABYLON: runs in Node tests and on the host) static collision world: boxes (AABB or Y-rotated), ramps, heightfield ground; BVH
 js/phys/ray.js             raycast / raycastAll against the world (with surface types)
 js/phys/move.js            character movement (Source-like accel/friction, step-up, crouch, jump, mantle, lean)
 js/game/game.js            Game session: scene, map, players, systems, authority (local|host|client)
@@ -315,10 +315,15 @@ B.mesh(mesh, { mat, collide: 'box'|'none'|[{ cx,cy,cz,hx,hy,hz,ry }], surf, merg
 B.instance(key, buildFn /*() => mesh*/, x, y, z, { ry, s, collide })  // thin-instanced repeated props
 B.collider({ cx, cy, cz, hx, hy, hz, ry, surf })                      // invisible collider
 B.light({ type: 'point'|'spot', x, y, z, color, intensity, range, dir, angle, fixture: true, flicker: 0 })
+                         // many lights: use BABYLON.ClusteredLightContainer when available, else assign each light only to the
+                         // chunks in its range (includedOnlyMeshes) and keep <= material.maxSimultaneousLights per chunk
+B.model(file /*assets/models/...glb*/, x, y, z, { ry, s, collide })   // CC0 glb props; loaded once per scene, instanced
 B.prop(type, x, y, z, { ry, s, variant, collide })                  // from PROPS (props.js)
 B.mat(name) -> BABYLON.Material                                     // from gfx/materials.js
 // markers (gameplay)
-B.spawn(team /*0 FFA, 1, 2*/, x, y, z, yaw)                         // >= 10 per team, >= 16 FFA (team spawns also count for FFA)
+B.spawn(team /*0 FFA, 1, 2*/, x, y, z, yaw, { field = false })
+   // round starts use the team's lobby spawns (>= 10 per team, inside its lobby); respawn modes use field spawns
+   // (field: true, >= 8 per team across that team's half, chosen away from enemies); FFA uses team 0 spawns (>= 16, whole map)
 B.lobby(team, { x0, z0, x1, z1, y }, gates: [{ x, z, w, h, ry }])  // staging room; gates block it until the round goes live
 B.buyzone(team, { x0, z0, x1, z1 })                                 // defaults to the team's lobby + spawn area
 B.hide(x, y, z, { r = .8, kind: 'bush'|'closet'|'vent'|'dark'|'crates'|'grass'|'car'|'under'|'roof' })  // >= 10 per map
@@ -326,14 +331,16 @@ B.site('A'|'B', { x0, z0, x1, z1, y })                              // bomb site
 B.hostage(x, y, z) ; B.rescue({ x0, z0, x1, z1 })                    // >= 4 hostages, rescue zone near team-2... see modes
 B.point(name, x, y, z, r)   // 'dom1'..'dom3', 'hp1'..'hp5', 'hill', 'flag1', 'flag2', 'extract1'.., 'hq1'..
 ```
-### MapInfo (returned by buildMap(scene, def, opts) in builder.js)
+### MapInfo (returned by `await buildMap(scene, def, opts)` in builder.js — async because of B.model loads)
 ```js
-{ id, def, world, spawns: { 0: [], 1: [], 2: [] } /*{x,y,z,yaw}*/, lobbies: { 1, 2 }, gates: [ids], buyzones, hides,
+{ id, def, world, spawns: { 0: [], 1: [], 2: [] } /*{x,y,z,yaw,field}*/, casters /*meshes for the sun shadow*/, lobbies: { 1, 2 }, gates: [ids], buyzones, hides,
   sites: { A, B }, hostages, rescue, points: { name: {x,y,z,r} }, bounds, lights, meshes, nav /*navgrid*/, dispose() }
 ```
 Every map must satisfy `validate.js`: spawns not inside colliders and on ground, every spawn/objective reachable
 on the navgrid from both teams' spawns, lobbies sealed by their gates, hides >= 10, sites A/B, >= 4 hostages + rescue,
 dom1-3, hp1-4, hill, flag1/flag2, extract1.
+`node tools/test/mapcheck.mjs <mapId> [--shots]` builds a map headless, runs validate.js and writes overview screenshots
+(top-down, each lobby, each site) to tools/test/out/maps/<id>/.
 
 ### The 25 maps (ids are fixed; js/maps/index.js lists them)
 See js/maps/index.js for id, name, theme, size and setting.
