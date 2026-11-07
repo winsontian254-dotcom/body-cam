@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "name": "live-fire-tools", "description": "Test tooling only. The game itself has no npm dependencies." }
