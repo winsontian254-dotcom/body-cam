@@ -136,7 +136,7 @@ async function main() {
           // a short far plane culls the rest of the gallery (SwiftShader renders every triangle in view)
           await page.evaluate(([q, far]) => { LF.sandbox.cam(q); LF.sandbox.camera.maxZ = far; }, [cam, dist + Math.max(d, 8) + 12]);
           await frames(page, 3);
-          await page.screenshot({ path: path.join(DIR, type + (c ? '-' + (c / per + 1) : '') + '.png') });
+          await page.screenshot({ path: path.join(DIR, type + (c ? '-' + (c / per + 1) : '') + '.png'), timeout: 240000 });
         }
       }
       // a few close-ups at eye height (1.64 m) to judge scale against the player
@@ -144,7 +144,7 @@ async function main() {
       for (const [type, dz] of [['container', 4], ['car', 3.5], ['sofa', 2.2], ['vending_machine', 2], ['tree', 7], ['hesco', 3]]) {
         const g = (await page.evaluate(t => import('/js/maps/defs/prop_gallery.js').then(m => m.GALLERY.find(q => q.type === t)), type)); if (!g) continue;
         await page.evaluate(c => LF.sandbox.cam(c), { x: g.x + 1.2, y: 1.64, z: g.z + g.d / 2 + dz, yaw: Math.PI - .25, pitch: .05, fov: 1.0 });
-        await frames(page, 3); await page.screenshot({ path: path.join(DIR, 'eye-' + type + '.png') });
+        await frames(page, 3); await page.screenshot({ path: path.join(DIR, 'eye-' + type + '.png'), timeout: 240000 });
       }
       const st = await page.evaluate(() => LF.sandbox.stats());
       console.log('  last view: ' + st.drawCalls + ' draw calls, ' + st.tris + ' tris, ' + st.activeMeshes + ' active meshes');

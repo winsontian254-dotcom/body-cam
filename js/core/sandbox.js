@@ -34,6 +34,7 @@ export async function startSandbox({ engine, canvas, mapId = 'dev_range', qualit
   const def = await loadMapDef(mapId);
   const env = await applyEnvironment(scene, def.env || {}, { quality });
   const info = await buildMap(scene, def, { quality });
+  if (env && env.setWorld && info.world) env.setWorld(info.world);   // sky occlusion: rain stops at roofs, interiors are not sky-lit
   if (env && env.shadow && info.casters) for (const m of info.casters) { try { env.shadow.addShadowCaster(m, false); } catch (e) { /* not a mesh */ } }
   const pipe = createPipeline(scene, camera, { quality, lens: DEV.nolens ? 'off' : Settings.get('lens') });
   const inst = new BABYLON.SceneInstrumentation(scene);
