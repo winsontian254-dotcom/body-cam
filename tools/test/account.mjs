@@ -21,6 +21,12 @@ const fails = [];
 let passes = 0;
 const check = (cond, msg) => { if (!cond) { fails.push(msg); console.log('  FAIL ' + msg); } else { passes++; console.log('  ok   ' + msg); } };
 const DAY = 86400000;
+const warns = [];
+/** screenshots are evidence, not assertions: a compositor starved by other test runs on the same machine must not crash the suite */
+async function snap(page, name) {
+  try { return await shot(page, name, { timeout: 120000 }); }
+  catch (e) { warns.push('screenshot ' + name + ' skipped: ' + e.message.split('\n')[0]); console.log('  warn screenshot ' + name + ' skipped (' + e.message.split('\n')[0] + ')'); return null; }
+}
 
 // ================================================================================================ part 1: Node unit checks
 async function unit() {
@@ -129,6 +135,7 @@ async function browserPart() {
   };
   async function context(opts = {}) {
     const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+    ctx.setDefaultNavigationTimeout(180000); ctx.setDefaultTimeout(60000);    // other workers' tests share this machine (SwiftShader)
     await cdnCache(ctx);
     await ctx.addInitScript(DATE_SHIM);
     if (process.env.LF_STUB_MISSING) await ctx.route(/\/js\/maps\/props\/[a-z]+\.js$/, async r => { const resp = await r.fetch(); if (resp.status() === 404) return r.fulfill({ status: 200, contentType: 'text/javascript', body: 'export default [];' }); return r.fulfill({ response: resp }); });
@@ -162,7 +169,7 @@ async function browserPart() {
     // ------------------------------------------------------------------------------------------ sign up through the UI
     await p1.click('.ac-chip');
     await p1.waitForSelector('.ac-form');
-    await shot(p1, 'account-signin');
+    await snap(p1, 'account-signin');
     await p1.click('.ac-mode .lf-seg-b[data-id=signup]');
     await p1.fill('input[name=email]', 'alpha@livefire.test');
     await p1.fill('input[name=username]', 'AlphaSix');
@@ -183,7 +190,7 @@ async function browserPart() {
     check(cloud1.status === 200 && /^LIVE FIRE · Level \d+ · 5 kills$/.test(cloud1.summary) && JSON.parse(cloud1.data).profile.xp === guestXp, 'guest progress joined the new account and went to the cloud slot "livefire" (' + cloud1.summary + ')');
     check(await lf(p1, id => LF.profile.get().owner === id, idA), 'profile owner = account id');
     let bf = null;
-    for (let i = 0; i < 30; i++) { bf = await node('GET', '/scores/' + encodeURIComponent('lf:tdm:all'), null, tokA); if (bf.top && bf.top.length) break; await new Promise(r => setTimeout(r, 200)); }
+    for (let i = 0; i < 100; i++) { bf = await node('GET', '/scores/' + encodeURIComponent('lf:tdm:all'), null, tokA); if (bf.top && bf.top.length) break; await new Promise(r => setTimeout(r, 200)); }
     check(bf.top && bf.top[0].name === 'AlphaSix' && bf.top[0].score === 1000 && bf.top[0].detail.k === 5, 'best match played as a guest is posted to lf:tdm:all after signing up (backfill)');
     // presence: default activity
     await lf(p1, () => LF.account.beat());
@@ -209,7 +216,7 @@ async function browserPart() {
     const rows = await p1.$$eval('.ac-list .ac-row', rs => rs.map(r => ({ t: r.textContent, join: !!r.querySelector('.lf-btn.primary') })));
     const rB = rows.find(r => r.t.includes('Bravo_7')), rC = rows.find(r => r.t.includes('CleoNV'));
     check(rB && rB.join && /CODE K7WQ2M/.test(rB.t) && rC && !rC.join && /NEON VEINS/.test(rC.t), 'friends list: LIVE FIRE host has JOIN, a Neon Veins player shows as NEON VEINS without JOIN');
-    await shot(p1, 'account-friends');
+    await snap(p1, 'account-friends');
     await p1.click('.ac-list .ac-row .lf-btn.primary');
     check(await lf(p1, () => window.__joined && window.__joined.code === 'K7WQ2M' && window.__joined.from === 'Bravo_7'), 'JOIN hands the code to the multiplayer layer (appBus net:join)');
     // invites: LIVE FIRE (joinable) and Neon Veins co-op (not)
@@ -221,7 +228,7 @@ async function browserPart() {
     await p1.waitForTimeout(400);
     const inv = await p1.$$eval('.ac-inv', cs => cs.map(c => ({ t: c.textContent, join: [...c.querySelectorAll('button')].some(b => b.textContent === 'JOIN') })));
     check(inv.some(i => /LIVE FIRE/.test(i.t) && i.join && /K7WQ2M/.test(i.t)) && inv.some(i => /NEON VEINS CO-OP/.test(i.t) && !i.join), 'invite cards: LIVE FIRE invite with JOIN, Neon Veins co-op invite without');
-    await shot(p1, 'account-invites');
+    await snap(p1, 'account-invites');
     await p1.click('.ac-inv:not(.nv) .lf-btn.primary');
     check(await lf(p1, () => window.__joined && window.__joined.code === 'K7WQ2M'), 'JOIN on an invite card');
     await lf(p1, () => LF.account.beat());
@@ -278,25 +285,26 @@ async function browserPart() {
     check(await lf(p1, x => LF.profile.get().owner === x.id && LF.profile.get().xp >= x.xp, { id: idA, xp: cloud3.xp }), 'signing back in restores AlphaSix progress');
     tokA = (await nv(p1)).token;      // the earlier session was signed out in tab 2
     await p1.click('.lf-tab[data-id=record]'); await p1.waitForTimeout(300);
-    await shot(p1, 'account-record');
+    await snap(p1, 'account-record');
     // ------------------------------------------------------------------------------------------ leaderboards (patched worker)
     await lf(p1, () => LF.profile.recordMatch({ mode: 'tdm', map: 'dev_range', result: 'win', kills: 22, deaths: 6, assists: 4, headshots: 9, time: 600, mvps: 1 }));
     const month = await lf(p1, () => { const d = new Date(); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0'); });
     let board = null;
-    for (let i = 0; i < 30; i++) { board = await node('GET', '/scores/' + encodeURIComponent('lf:tdm:' + month), null, C.token); if (board.top && board.top.length) break; await new Promise(r => setTimeout(r, 200)); }
-    check(board.top && board.top[0].name === 'AlphaSix' && board.top[0].score === 22 * 100 + 4 * 40 + 9 * 25 + 50 + 500 && board.top[0].detail.k === 22, 'match score posted to lf:tdm:' + month + ' (' + (board.top && board.top[0] && board.top[0].score) + ')');
+    const want = 22 * 100 + 4 * 40 + 9 * 25 + 50 + 500;      // the board already holds the 9-kill loss (980): wait for the new best
+    for (let i = 0; i < 100; i++) { board = await node('GET', '/scores/' + encodeURIComponent('lf:tdm:' + month), null, C.token); if (board.top && board.top.length && board.top[0].score === want) break; await new Promise(r => setTimeout(r, 200)); }
+    check(board.top && board.top[0].name === 'AlphaSix' && board.top[0].score === want && board.top[0].detail.k === 22, 'match score posted to lf:tdm:' + month + ' (' + (board.top && board.top[0] && board.top[0].score) + ')');
     let xpb = null; const xpNow = await lf(p1, () => LF.profile.get().xp);
-    for (let i = 0; i < 40; i++) { xpb = await node('GET', '/scores/lf:xp:all', null, C.token); if (xpb.top && xpb.top.length && xpb.top[0].score === xpNow) break; await new Promise(r => setTimeout(r, 200)); }
+    for (let i = 0; i < 100; i++) { xpb = await node('GET', '/scores/lf:xp:all', null, C.token); if (xpb.top && xpb.top.length && xpb.top[0].score === xpNow) break; await new Promise(r => setTimeout(r, 200)); }
     check(xpb.top && xpb.top[0].score === xpNow && xpb.top[0].detail.lv > 1, 'total XP posted to lf:xp:all (' + xpNow + ', level ' + (xpb.top && xpb.top[0] && xpb.top[0].detail.lv) + ')');
     await p1.click('.lf-tab[data-id=boards]');
     await p1.waitForSelector('.ac-br.me', { timeout: 15000 });
-    await shot(p1, 'account-boards');
+    await snap(p1, 'account-boards');
     check(await p1.$eval('.ac-br.me', e => /AlphaSix/.test(e.textContent)), 'leaderboard UI shows your row');
     // ------------------------------------------------------------------------------------------ daily rewards across days (UI)
     await p1.click('.pr-back');
     await p1.click('.mn-item[data-id=rewards]');
     await p1.waitForSelector('.rw-claim-btn');
-    await shot(p1, 'account-rewards-ready');
+    await snap(p1, 'account-rewards-ready');
     await p1.click('.rw-claim-btn');
     await p1.waitForSelector('.rw-reveal .rw-card.in', { timeout: 10000 });
     await p1.keyboard.press('Enter'); await p1.keyboard.press('Enter');
@@ -317,15 +325,15 @@ async function browserPart() {
       dayLog.push(label.replace('CLAIM ', ''));
       await p1.click('.rw-claim-btn');
       await p1.waitForSelector('.rw-reveal .rw-card.in', { timeout: 15000 });
-      if (d === 6) { await p1.waitForTimeout(2600); await shot(p1, 'account-rewards-day7'); }
-      if (d === 3) { await p1.waitForTimeout(2200); await shot(p1, 'account-rewards-crate'); }
+      if (d === 6) { await p1.waitForTimeout(2600); await snap(p1, 'account-rewards-day7'); }
+      if (d === 3) { await p1.waitForTimeout(2200); await snap(p1, 'account-rewards-crate'); }
       await p1.keyboard.press('Enter'); await p1.waitForTimeout(100); await p1.keyboard.press('Enter');
       await p1.waitForSelector('.rw-cd', { timeout: 10000 });
     }
     check(dayLog.join(',') === 'DAY 2,DAY 3,DAY 4,DAY 5,DAY 6,DAY 7', 'consecutive days advance the cycle to day 7 (' + dayLog.join(',') + ')');
     const r7 = await lf(p1, () => ({ st: LF.rewards.status(), atts: Object.keys(LF.profile.get().owned.att).length, skins: Object.keys(LF.profile.get().owned.skin).length, boost: LF.profile.boost() }));
     check(r7.st.streak === 7 && r7.atts >= 2 && r7.skins >= 3 && r7.boost.matches > 0, 'week complete: streak 7, crates unlocked items, XP boost active');
-    await shot(p1, 'account-rewards-week');
+    await snap(p1, 'account-rewards-week');
     // skip two days: streak resets
     await p1.evaluate(() => { const b = new Date(); const t = new Date(b.getFullYear(), b.getMonth(), b.getDate() + 3, 12).getTime(); window.__setDateOffset(t - (Date.now() - (Number(localStorage.getItem('__lf_date_off')) || 0))); });
     await p1.waitForSelector('.rw-claim-btn', { timeout: 10000 });
@@ -334,7 +342,7 @@ async function browserPart() {
     await p1.evaluate(() => window.__setDateOffset(-20 * 86400000));
     await p1.waitForSelector('.rw-cd', { timeout: 10000 });
     check(/CLOCK CHECK/.test(await p1.textContent('.rw-day')) && (await lf(p1, () => LF.rewards.claim().reason)) === 'clock', 'clock set back: nothing to claim, clock message');
-    await shot(p1, 'account-rewards-clock');
+    await snap(p1, 'account-rewards-clock');
     await p1.evaluate(() => window.__setDateOffset(0));
     // the streak followed the account to the cloud
     await lf(p1, () => LF.profile.flush());
@@ -377,7 +385,7 @@ async function browserPart() {
       await lf(p4, () => LF.profile.recordMatch({ mode: 'tdm', result: 'win', kills: 3, time: 300 }));
       await p4.click('.mn-item[data-id=account]'); await p4.click('.lf-tab[data-id=boards]');
       await p4.waitForSelector('.ac-empty.nb', { timeout: 10000 });
-      await shot(p4, 'account-boards-unavailable');
+      await snap(p4, 'account-boards-unavailable');
       check(true, 'leaderboard screen shows "not available yet"');
       harvest(p4); await ctx4.close(); await old.stop();
     }
@@ -399,7 +407,8 @@ async function browserPart() {
       const act = await page.evaluate(() => LF.account.status().activity);
       check(/^LIVE FIRE · Practice TDM/.test(act), 'presence activity follows the running match ("' + act + '")');
       const res = await page.evaluate(() => {
-        const g = LF.game, me = g.local; let guard = 0;
+        const g = LF.game, me = g.local; let guard = 0, atEnd = -1;
+        g.bus.on('match:end', () => { atEnd = me.stat.shots; });   // ticks after the end (same debugStep) may still fire
         const foes = () => [...g.players.values()].filter(p => p.alive && p.team !== me.team);
         while (g.match.phase !== 'over' && guard++ < 900) {
           const f = foes()[0];
@@ -407,7 +416,7 @@ async function browserPart() {
           g.debugStep(0.25);
         }
         g.setLocalCommand(null);
-        return { phase: g.match.phase, shots: me.stat.shots, kills: me.kills };
+        return { phase: g.match.phase, shots: atEnd >= 0 ? atEnd : me.stat.shots, kills: me.kills };
       });
       await page.waitForFunction(() => LF.profile.lastMatch, null, { timeout: 10000 }).catch(() => {});
       const rec = await page.evaluate(() => { const m = LF.profile.lastMatch; return m && { s: m.summary, r: { xp: m.result.xp, credits: m.result.credits, lines: m.result.breakdown.length }, matches: LF.profile.stats().matches, guns: Object.keys(LF.profile.get().guns) }; });
@@ -417,7 +426,7 @@ async function browserPart() {
       for (const e of errs) allErr.push('match: ' + e);
       await ctx6.close();
     }
-    await shot(p1, 'account-title-after');
+    await snap(p1, 'account-title-after');
     harvest(p1); harvest(p2);
     await ctx.close();
   } finally {
@@ -433,6 +442,7 @@ try {
   if (ONLY !== 'browser') await unit();
   if (ONLY !== 'unit') await browserPart();
 } catch (e) { fails.push('crashed: ' + (e.stack || e.message)); console.log(e); }
+if (warns.length) console.log('\nWARNINGS:\n  ' + warns.join('\n  '));
 console.log('\n' + passes + ' passed, ' + fails.length + ' failed in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s; screenshots in ' + OUT);
 if (fails.length) { console.log('FAILURES:\n  ' + fails.join('\n  ')); process.exit(1); }
 process.exit(0);

@@ -733,15 +733,17 @@ export class Kit {
       if (v3.dot(n, out) < 0) n = v3.sc(n, -1);
       return n;
     };
-    const sl = [0]; for (let i = 1; i <= N; i++) sl.push(sl[i - 1] + v3.len(v3.sub(P[mid][i % N], P[mid][i - 1])));
+    // texture u around each row from that row's own perimeter (rows of very different size, e.g. a stock's wrist and butt, would
+    // otherwise stretch the texture across the big rows), v along the rows from the centroid path
+    const slR = P.map(row => { const sl = [0]; for (let i = 1; i <= N; i++) sl.push(sl[i - 1] + v3.len(v3.sub(row[i % N], row[i - 1]))); return sl; });
     const vl = [0]; for (let s = 1; s < S; s++) vl.push(vl[s - 1] + v3.len(v3.sub(cen[s], cen[s - 1])));
     const sw = !!o.uvSwap, vx = (p, n, u, v, w) => (sw ? md.v(p, n, v, u, 1, w) : md.v(p, n, u, v, 1, w));   // uvSwap: texture x along the rows (wood grain lengthwise)
     for (let s = 0; s < S - 1; s++) for (let i = 0; i < N; i++) {
       const j = (i + 1) % N;
-      const a = vx(P[s][i], nrmAt(s, i, 'out', s), sl[i], vl[s], W[s][i]);
-      const b = vx(P[s][j], nrmAt(s, j, 'in', s), sl[i + 1], vl[s], W[s][j]);
-      const c = vx(P[s + 1][j], nrmAt(s + 1, j, 'in', s), sl[i + 1], vl[s + 1], W[s + 1][j]);
-      const d = vx(P[s + 1][i], nrmAt(s + 1, i, 'out', s), sl[i], vl[s + 1], W[s + 1][i]);
+      const a = vx(P[s][i], nrmAt(s, i, 'out', s), slR[s][i], vl[s], W[s][i]);
+      const b = vx(P[s][j], nrmAt(s, j, 'in', s), slR[s][i + 1], vl[s], W[s][j]);
+      const c = vx(P[s + 1][j], nrmAt(s + 1, j, 'in', s), slR[s + 1][i + 1], vl[s + 1], W[s + 1][j]);
+      const d = vx(P[s + 1][i], nrmAt(s + 1, i, 'out', s), slR[s + 1][i], vl[s + 1], W[s + 1][i]);
       md.q(a, b, c, d);
     }
     for (const [s, on, holes] of [[0, o.capA !== false, o.holesA], [S - 1, o.capB !== false, o.holesB]]) {

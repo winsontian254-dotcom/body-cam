@@ -4,7 +4,7 @@
 import { corrugated, bolts, handle, louvres, wheel, railing, ladder, stackBoxes, grid } from './parts.js';
 
 const PI = Math.PI;
-const CMAT = { green: 'container', red: 'container_red', blue: 'container_blue', orange: 'container_orange', grey: 'container_grey', white: 'p_paint_cream', rust: 'corrugated_rust' };
+const CMAT = { green: 'container', red: 'container_red', blue: 'container_blue', orange: 'container_orange', grey: 'container_grey', white: 'p_cont_white', rust: 'p_cont_rust' };
 
 // ------------------------------------------------------------------------------------------------ shipping container
 function containerDoor(K, mat, hingeX, side, z, w, h, ang, code) {
@@ -49,7 +49,7 @@ function container(K, o, v, rnd) {
   for (let z = -hl + .5; z < hl - .3; z += .55) K.box(mat, 0, H - .035, z, W - .4, .012, .2, { bev: .005 });
   K.box('plywood', 0, .12, 0, W - .14, .04, L - .3);
   // doors
-  const dw = W / 2 - .06, dh = H - .46, doors = o.doors || 'closed';
+  const dw = hw - .026, dh = H - .46, doors = o.doors || 'closed';   // the two leaves meet in the middle (1.2 cm seam)
   if (doors !== 'none') {
     const aR = doors === 'open' ? 1.5 * PI - .05 : doors === 'ajar' ? 1.75 : 0, aL = doors === 'open' ? 1.5 * PI - .05 : 0;
     containerDoor(K, mat, hw - .02, 1, hl - .02, dw, dh, aR, code);
@@ -125,6 +125,7 @@ function crateStack(K, o, v, rnd) {
     K.push(x, y, z, (rnd() - .5) * .3); crate(K, {}, kind, rnd); K.pop();
     void w; void h; void d;
   }
+  K.hide(.2, 0, -1.25, 'crates', .6);   // behind the heap (-z)
 }
 
 function plasticCrate(K, o, v, rnd) {
@@ -272,9 +273,10 @@ function ibc(K, o, v, rnd) {
   K.box('p_galv', 0, 0, 0, L, .03, W, { bev: .005 }); K.box('p_galv', 0, base - .03, 0, L, .03, W);
   for (const x of [-.5, 0, .5]) K.box('p_galv', x, .03, 0, .1, base - .06, W);
   // plastic bottle (milky) with fill level shading via a darker inner box
-  K.box('p_plastic_milky', 0, base, 0, L - .06, H - base - .06, W - .06, { bev: .05 });
-  K.cyl('p_plastic_milky', 0, H - .06, 0, .16, .05, { seg: 14 });
-  K.cyl(v === 'blue' ? 'p_plastic_blue' : 'p_plastic_dark', 0, H - .02, 0, .18, .05, { seg: 14 });
+  const bottle = v === 'blue' ? 'p_plastic_blue' : 'p_plastic_milky';    // blue = opaque UV-blocking bottle
+  K.box(bottle, 0, base, 0, L - .06, H - base - .06, W - .06, { bev: .05 });
+  K.cyl(bottle, 0, H - .06, 0, .16, .05, { seg: 14 });
+  K.cyl('p_plastic_dark', 0, H - .02, 0, .18, .05, { seg: 14 });
   // cage: tubular grid on the four sides + top
   const cage = 'p_galv', r = .011;
   for (const s of [-1, 1]) { grid(K, cage, 0, base, s * W / 2, L, H - base, 7, 4, r); K.push(s * L / 2, 0, 0, PI / 2); grid(K, cage, 0, base, 0, W, H - base, 6, 4, r); K.pop(); }
@@ -539,7 +541,7 @@ function tank(K, o, v, rnd) {
     }
     K.cyl('p_galv', 0, y + r - .05, L * .2, .15, .25, { seg: 12 }); K.cyl('p_galv', 0, y + r + .2, L * .2, .2, .04, { seg: 12 });
     ladder(K, 'p_galv', r * .55, 0, -L * .1, y + r * .7, { w: .4 }); K.push(r * .3, y + r * .9, -L * .1); railing(K, 'paint_yellow', -.6, -.5, .6, -.5, 0, { h: 1.0, toe: false }); K.pop();
-    K.decal('haz_flame', r * .98, y, 0, .35, .35, { face: 'e' }); K.decal('un_plate', r * .98, y, -1.2, .3, .21, { face: 'e' });
+    K.decal('haz_flame', r + .006, y, .7, .3, .3, { face: 'e' }); K.decal('un_plate', r + .006, y, -1.2, .28, .2, { face: 'e' });   // clear of the hoops
     K.col(0, 0, 0, r * 2, y + r, L, { surf: 'metal' });
     return;
   }
@@ -624,21 +626,45 @@ function rebar(K, o, v, rnd) {
     const x = -.32 + col * .08 + (row % 2) * .04, y = .12 + row * .065, zj = (rnd() - .5) * .3;
     K.cylZ('metal_rust', -L / 2 + zj, L / 2 + zj, x, y, .014, { seg: 5, caps: false });
   }
-  for (const z of [-L / 2 + 1.2, L / 2 - 1.2]) K.box('steel_dark', 0, .1, z, .76, .3, .01, { skip: 'tb' });
+  const rows = Math.ceil(n / 9), top = .12 + (rows - 1) * .065 + .016;
+  for (const z of [-L / 2 + 1.2, 0.3, L / 2 - 1.2]) {   // wire bands round the bundle
+    const x0 = -.35, x1 = .39, y0 = .1, y1 = top, c = .02;
+    K.tube('steel_dark', [[x0 + c, y0, z], [x1 - c, y0, z], [x1, y0 + c, z], [x1, y1 - c, z], [x1 - c, y1, z], [x0 + c, y1, z], [x0, y1 - c, z], [x0, y0 + c, z], [x0 + c, y0, z]], .004, { seg: 4 });
+  }
   K.col(0, 0, 0, .9, .4, L, { surf: 'metal', walk: true });
 }
 function cementMixer(K, o, v, rnd) {
-  const mat = v === 'yellow' ? 'paint_yellow' : 'p_paint_orange';
-  for (const s of [-1, 1]) { K.box('steel_dark', s * .35, .2, 0, .06, .7, .06); wheel(K, s * .5, .2, -.1, .2, { w: .1, side: s, spokes: 0, rimMat: 'steel_dark' }); }
-  K.box('steel_dark', 0, .7, 0, .9, .06, .5);
-  K.box(mat, 0, .76, -.15, .4, .3, .35, { bev: .03 });          // motor housing
-  K.push(0, 1.1, .1, 0, -.45, 0);
-  K.lathe(mat, [[0, -.05], [.2, -.04], [.42, .1], [.45, .35], [.36, .58], [.22, .7], [.2, .74]], { seg: 18, capT: false, sharp: 35 });
-  K.lathe('steel_dark', [[.19, .7], [.15, .7]], { seg: 18, caps: false });
+  // a portable site mixer (~140 l drum): tubular stand with two wheels at the back and legs at the front, pedestal + motor
+  // cover, the drum on a yoke tilted ~35 degrees toward +z (mouth up and forward), ring gear, tilt handwheel, push handle
+  const mat = v === 'yellow' ? 'paint_yellow' : 'p_paint_orange', fr = 'steel_dark', tr = .022;
+  for (const s of [-1, 1]) {
+    K.tube(fr, [[s * .28, .36, -.5], [s * .28, .36, .42]], tr, { seg: 6 });                            // frame rails
+    K.tube(fr, [[s * .28, .36, .4], [s * .3, 0, .48]], tr, { seg: 6 });                                // front legs
+    K.box(fr, s * .3, 0, .48, .08, .02, .08);
+    wheel(K, s * .38, .19, -.48, .19, { w: .08, side: s, spokes: 0, rimMat: 'paint_black', rim: .5 });
+    K.tube(fr, [[s * .28, .36, -.5], [s * .3, .52, -.75], [s * .3, .95, -.82]], tr, { seg: 6 });   // push handle
+  }
+  K.cylX(fr, -.4, .4, .19, -.48, .018, { seg: 8 });                                                     // axle
+  K.tube(fr, [[-.3, .95, -.82], [.3, .95, -.82]], tr * 1.2, { seg: 6 });
+  for (const z of [-.45, .38]) K.tube(fr, [[-.28, .36, z], [.28, .36, z]], tr, { seg: 6 });
+  K.box(mat, 0, .38, -.18, .44, .3, .4, { bev: .04 });                                                    // motor cover
+  for (const s of [-1, 1]) louvres(K, 'p_paint_darkgrey', s * .222, .44, -.18, .28, .16, 5, { ry: s * PI / 2 });
+  K.box(fr, 0, .38, .1, .14, .52, .14, { bev: .01 });                                                     // pedestal
+  for (const s of [-1, 1]) K.box(mat, s * .39, .82, .1, .05, .26, .1, { bev: .012 });                    // yoke uprights
+  K.box(mat, 0, .82, .1, .83, .07, .12, { bev: .012 });
+  // drum: closed rounded base, cylindrical waist with the ring gear, cone up to the mouth; inner skin so the mouth is not a hole
+  const prof = [[0, -.4], [.14, -.39], [.3, -.26], [.35, -.08], [.35, .05], [.3, .14], [.18, .33], [.165, .37]];
+  K.push(0, 1.08, .12, 0, .62, 0);
+  K.lathe(mat, prof, { seg: 22, capT: false, sharp: 32 });
+  K.lathe('steel_dark', prof.slice(1).reverse().map(([r, y]) => [Math.max(0, r - .012), y]), { seg: 22, caps: false, sharp: 32 });
+  K.lathe(mat, [[.165, .37], [.152, .37]], { seg: 22, caps: false });                                    // lip
+  K.ring('steel_dark', 0, -.02, 0, .365, .022, { seg: 22, tseg: 6 });                                   // ring gear
+  for (let i = 0; i < 3; i++) { const a = i * 2.09; K.box('steel_dark', Math.cos(a) * .22, .1, Math.sin(a) * .22, .02, .22, .14, { ry: -a }); }  // blades
   K.pop();
-  K.ring('steel_dark', .52, 1.0, .1, .17, .015, { rz: PI / 2, seg: 14 });
-  K.tube('steel_dark', [[-.35, .75, -.25], [-.6, 1.0, -.6], [-.6, 1.05, -.75]], .018, { seg: 6 });
-  K.col(0, 0, 0, 1.1, 1.5, 1.1, { surf: 'metal' });
+  K.cylX(fr, -.42, .42, .99, .1, .03, { seg: 8 });                                                      // trunnion shaft
+  K.ring('steel_dark', .5, .99, .1, .16, .013, { rz: PI / 2, seg: 16, tseg: 5 });                       // tilt handwheel
+  for (let i = 0; i < 4; i++) { const a = i * PI / 2; K.tube('steel_dark', [[.5, .99, .1], [.5, .99 + Math.sin(a) * .16, .1 + Math.cos(a) * .16]], .008, { seg: 4 }); }
+  K.col(0, 0, -.1, .9, 1.45, 1.25, { surf: 'metal' });
 }
 
 // ------------------------------------------------------------------------------------------------ site cabin, generator, AC, vents, cranes
@@ -857,7 +883,7 @@ export default [
     variants: Object.keys(DRUMCOL), opts: { n: 'cluster of 1-4', fallen: 'true = the first drum lies on its side' }, build: drum },
   { type: 'gas_cylinder', cat: 'industrial', size: [.23, 1.55, .23], vary: true, keys: ['n', 'rack'], desc: 'compressed gas cylinders (colour-coded), LPG bottle, or a caged rack of six',
     variants: ['oxygen', 'acetylene', 'nitrogen', 'co2', 'argon', 'propane'], opts: { n: 'row of n (<= 5)', rack: 'true = steel cage with 6 cylinders (1.0 x 1.6 x .55)' }, build: gasCylinder },
-  { type: 'ibc_tank', cat: 'industrial', size: [1.2, 1.19, 1.0], desc: 'IBC tote: milky tank in a steel cage on a pallet base', variants: ['white', 'blue'], build: ibc },
+  { type: 'ibc_tank', cat: 'industrial', size: [1.2, 1.19, 1.0], desc: 'IBC tote: milky (white) or opaque blue tank in a steel cage on a pallet base', variants: ['white', 'blue'], build: ibc },
   { type: 'dumpster', cat: 'industrial', size: [1.9, 1.26, 1.12], keys: ['lid'], desc: 'front-load dumpster, sloped front, plastic lids, fork pockets, casters (hide behind)',
     variants: Object.keys(DUMPCOL), opts: { lid: "'closed' | 'open'" }, build: dumpster },
   { type: 'wheelie_bin', cat: 'street', size: [.6, 1.07, .76], keys: ['open', 'lid'], desc: '240 l wheelie bin', variants: Object.keys(BINCOL), opts: { open: 'lid open', lid: 'lid colour (variant name)' }, build: wheelieBin },
@@ -889,7 +915,7 @@ export default [
   { type: 'scaffolding', alias: ['scaffold'], cat: 'construction', size: [5, 5, 1.1], keys: ['bays', 'levels'], desc: 'tube scaffold: walkable plank decks every 2 m, guard rails on the +z side, bracing',
     opts: { bays: '2.5 m bays along x', levels: 'decks (2 m apart)' }, sizeOf: o => [(o.bays || 2) * 2.5, (o.levels || 2) * 2 + 1, 1.1], build: scaffold },
   { type: 'rebar_bundle', cat: 'construction', size: [.9, .4, 6], vary: true, keys: ['len', 'n'], desc: 'bundle of rebar on timber sleepers (along z)', opts: { len: 'length', n: 'bars' }, build: rebar },
-  { type: 'cement_mixer', cat: 'construction', size: [1.1, 1.5, 1.1], desc: 'site drum mixer on wheels', variants: ['orange', 'yellow'], build: cementMixer },
+  { type: 'cement_mixer', cat: 'construction', size: [1.0, 1.5, 1.4], desc: 'portable site mixer: tilted drum on a yoke, tilt handwheel, motor cover, two wheels + legs, push handle (back = -z)', variants: ['orange', 'yellow'], build: cementMixer },
   { type: 'site_cabin', cat: 'construction', size: [6.0, 2.6, 2.44], keys: ['interior'], desc: 'portable site office: ribbed walls, barred windows, door + steps on +z; interior = walk-in with a desk',
     variants: ['cream', 'blue', 'grey'], opts: { interior: 'true = hollow, door open' }, build: siteCabin },
   { type: 'generator', cat: 'industrial', size: [2.5, 1.6, 1.2], keys: ['trailer', 'kind'], desc: 'diesel generator set (louvres, panel, exhaust), trailer-mounted, or a small portable one',

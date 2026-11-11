@@ -162,6 +162,9 @@ export const NADE_SHAPES = {
     K.mat('strap').sweep(st, { rad: D(4), sx: 3, sy: .5, segs: 8, up: [0, 0, 1] });
     K.mat('box').box(D(50), D(26), D(20), { p: P3(w * .2, h / 2 + 8, d * .1), b: D(3) }); K.mat('led').sphere(D(2.4), { p: P3(w * .2 + 14, h / 2 + 21.6, d * .1), segs: 10 }); K.node('led', P3(w * .2 + 14, h / 2 + 23, d * .1), [0, 0, 0]);
     if (K.detail(0)) K.mat('metal').cyl(D(1.4), D(60), { p: P3(w * .2 - 18, h / 2 + 20, d * .1), axis: 'y', segs: 8 });
+    // firing wire from the radio box down the bag side to the clacker
+    const wire = [[w * .2 - 25, h / 2 + 4, d * .1], [-w / 2 + 4, h / 2 + 2, d * .45], [-w / 2 - 4, h * .1, d * .62], [-w / 2 + 2, -h / 2 - 6, d * .8], [-w * .34, -h / 2 - 26, d * .98], [-w * .3, -h / 2 - 37, d]];
+    K.mat('rubber').sweep(wire.map(q => P3(...q)), { rad: D(1.5), segs: 8 });
     K.part('clacker', { pivot: P3(-w * .3, -h / 2 - 50, d), meta: { detonator: true } });
     K.mat('det').extrude(SHc(K, [[-40, -12, 6], [40, -12, 6], [40, 12, 6], [-40, 12, 6]], .8), D(26), { plane: 'zy', p: P3(-w * .3, -h / 2 - 50, d), r: [0, HALF, 0], b: D(4), bs: 2 });
     K.mat('metal').extrude(SHc(K, [[-34, 0], [30, 0], [30, 8, 3], [-34, 6, 3]], .5), D(20), { plane: 'zy', p: P3(-w * .3, -h / 2 - 38, d), r: [0, HALF, -.15], b: D(1.4), bs: 2 });

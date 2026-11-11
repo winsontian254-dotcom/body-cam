@@ -120,7 +120,7 @@ export function rewardsScreen() {
     : it.type === 'boost' ? { big: '×' + it.mult + ' XP', small: it.matches + ' MATCHES' } : { big: '+' + fmtN(it.n), small: it.type === 'xp' ? 'XP' : 'CREDITS' };
   function render() {
     const st = Rewards.status();
-    $('.rw-head-r').textContent = Account.member() ? 'STREAK SAVED TO YOUR ACCOUNT' : 'GUEST · STREAK SAVED ON THIS DEVICE';
+    $('.rw-head-r').textContent = Account.member() ? 'STREAK SAVED TO YOUR ACCOUNT' : 'GUEST · STREAK ON THIS DEVICE';
     $('.rw-day').innerHTML = '<span>' + (st.clockBack ? 'CLOCK CHECK' : st.ready ? 'DAY ' + st.day + ' OF 7 · READY' : 'DAY ' + st.day + ' OF 7 · COLLECTED') + '</span><b>' + esc(st.reward.title) + '</b>'
       + '<p>' + (st.clockBack ? 'Your device clock is earlier than your last claim. Rewards resume once the date catches up.' : st.broken ? 'You missed a day: the streak starts again at day 1.' : 'Claim once a day. Seven days in a row opens the Evidence Locker; miss a day and the streak starts over.') + '</p>';
     $('.rw-streak').innerHTML = '<div><span>STREAK</span><b>' + st.streak + '</b></div><div><span>BEST</span><b>' + st.best + '</b></div><div><span>CLAIMED</span><b>' + st.claims + '</b></div>'

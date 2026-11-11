@@ -2,6 +2,7 @@
    field desk set. (Sandbags and HESCO walls are in street.js; ammo cans in industrial.js.)
    Exports: default [prop definitions]. */
 import { leg4, ladder, railing, stackBoxes } from './parts.js';
+import { decalUV } from './kit.js';
 
 const PI = Math.PI;
 
@@ -71,22 +72,34 @@ function ammoCrates(K, o, v, rnd) {
   const xs = spots.slice(0, n).map(q => q[0]); K.col((Math.min(...xs) + Math.max(...xs)) / 2, 0, 0, Math.max(...xs) - Math.min(...xs) + .62, top, 1.04, { surf: 'wood' });
 }
 function camoNet(K, o, v, rnd) {
-  const W = o.w || 6, D = o.d || 6, H = o.h || 2.6, mat = v === 'desert' ? 'p_fab_tan' : 'p_fab_olive', n = 8;
+  // a garnished camouflage net (decal atlas 'camo_wood' / 'camo_desert': cord mesh + jagged cut-outs, alpha tested) laid cell by
+  // cell over a sagging grid on five poles, a second loose layer for depth, ragged skirts hanging from the edges
+  const W = o.w || 6, D = o.d || 6, H = o.h || 2.6, n = 8, slot = v === 'desert' ? 'camo_desert' : 'camo_wood';
+  const uv = decalUV(slot), mat = 'p_decal';
   const pt = (i, j) => { const x = -W / 2 + W * i / n, z = -D / 2 + D * j / n, edge = Math.min(i, j, n - i, n - j) === 0; const sag = Math.sin(PI * i / n) * Math.sin(PI * j / n); return [x + (rnd() - .5) * .1, edge ? H - .4 - rnd() * .3 : H - .15 * sag + (rnd() - .5) * .12, z + (rnd() - .5) * .1]; };
   const grid = []; for (let i = 0; i <= n; i++) { grid.push([]); for (let j = 0; j <= n; j++) grid[i].push(pt(i, j)); }
-  // the net itself: dense leaf-shaped cards (alpha cut) following the sagging grid, tinted woodland / desert
-  const tint = v === 'desert' ? [1.35, 1.08, .66] : [.72, .8, .55];
-  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) for (let k = 0; k < 3; k++) {
-    const f = rnd(), g = rnd(), a = grid[i][j], b = grid[i + 1][j + 1], c = grid[i + 1][j], d = grid[i][j + 1];
-    const y = (a[1] * (1 - f) * (1 - g) + c[1] * f * (1 - g) + d[1] * (1 - f) * g + b[1] * f * g);
-    const sh = .75 + rnd() * .35;
-    K.card(a[0] + (b[0] - a[0]) * f, y, a[2] + (b[2] - a[2]) * g, 1.25, 1.25, 1, { rx: PI / 2 + (rnd() - .5) * .5, rz: rnd() * PI * 2, n: [0, 1, 0], col: [tint[0] * sh, tint[1] * sh, tint[2] * sh] });
+  // the top of a pole lifts the net around it into a tent shape
+  const poles = [[-W / 2 + .3, -D / 2 + .3], [W / 2 - .3, -D / 2 + .3], [-W / 2 + .3, D / 2 - .3], [W / 2 - .3, D / 2 - .3], [0, 0]];
+  grid[n / 2][n / 2][1] = H;
+  const up = [0, 1, 0];
+  const quad = (p, k, sh, lift) => {   // p = 4 corners (counter-clockwise from above); k rotates the texture by k * 90 degrees
+    const c = [(p[0][0] + p[2][0]) / 2, (p[0][1] + p[2][1]) / 2, (p[0][2] + p[2][2]) / 2], e = 1.14;   // overlap the neighbours
+    const q = p.map(x => [c[0] + (x[0] - c[0]) * e, c[1] + (x[1] - c[1]) * e + lift, c[2] + (x[2] - c[2]) * e]);
+    const r = [q[k % 4], q[(k + 1) % 4], q[(k + 2) % 4], q[(k + 3) % 4]];
+    K.quad(mat, r[0], r[1], r[2], r[3], { uv, n: up, two: true, col: [sh, sh, sh] });
+  };
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const p = [grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]];
+    quad(p, Math.floor(rnd() * 4), .82 + rnd() * .3, 0);
+    if (rnd() < .45) quad(p, Math.floor(rnd() * 4), .7 + rnd() * .3, -.06 - rnd() * .08);     // loose under-layer
   }
-  for (let e = 0; e <= n; e++) for (const [i, j] of [[e, 0], [e, n], [0, e], [n, e]]) {   // ragged hanging edges
-    const p = grid[i][j]; K.card(p[0], p[1] - .25, p[2], .9, .8, 1, { ry: rnd() * PI, n: [p[0], .5, p[2]], col: tint });
+  for (let e = 0; e < n; e++) for (const [i0, j0, i1, j1] of [[e, 0, e + 1, 0], [e, n, e + 1, n], [0, e, 0, e + 1], [n, e, n, e + 1]]) {   // skirts
+    const a = grid[i0][j0], b = grid[i1][j1], drop = .35 + rnd() * .45, out = [Math.sign(a[0] + b[0]) * (i0 === i1 ? 1 : 0), 0, Math.sign(a[2] + b[2]) * (j0 === j1 ? 1 : 0)];
+    const f = .1;   // flare outward a little as it hangs
+    K.quad(mat, [a[0], a[1], a[2]], [b[0], b[1], b[2]], [b[0] + out[0] * f, b[1] - drop, b[2] + out[2] * f], [a[0] + out[0] * f, a[1] - drop, a[2] + out[2] * f],
+      { uv: [uv[0], uv[1], uv[2], uv[1] + (uv[3] - uv[1]) * .5], n: out, two: true, col: [.85, .85, .85] });
   }
-  for (const [x, z] of [[-W / 2 + .3, -D / 2 + .3], [W / 2 - .3, -D / 2 + .3], [-W / 2 + .3, D / 2 - .3], [W / 2 - .3, D / 2 - .3], [0, 0]]) K.cyl('p_wood_sleeper', x, 0, z, .04, (x || z) ? H - .35 : H - .1, { seg: 6 });
-  K.noCast('grate');
+  for (const [x, z] of poles) K.cyl('p_wood_sleeper', x, 0, z, .04, (x || z) ? H - .38 : H - .02, { seg: 6 });
   K.hide(0, 0, 0, 'dark', 1.0);
 }
 function watchtower(K, o, v, rnd) {

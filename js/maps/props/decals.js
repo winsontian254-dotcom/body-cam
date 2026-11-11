@@ -362,3 +362,37 @@ D('car_grille', 256, 64, (g, w, h) => {
   for (let x = 10; x < w; x += 14) { g.beginPath(); g.moveTo(x, 6); g.lineTo(x - 6, h - 6); g.stroke(); }
   for (let y = 10; y < h; y += 12) { g.beginPath(); g.moveTo(6, y); g.lineTo(w - 6, y); g.stroke(); }
 });
+// camouflage net garnish (alpha cut): a knotted cord mesh with jagged leaf-like cut-outs in two palettes. Tiles with itself
+// (shapes that cross an edge are drawn again on the opposite side), so camo_net can lay it cell by cell over the sagging net.
+[['camo_wood', ['#3b4a2a', '#56603a', '#2a3020', '#5e4a32', '#1e2318', '#47512f']], ['camo_desert', ['#b8a47a', '#9c8559', '#c9b88f', '#7d6a48', '#d6c7a0', '#a8916a']]]
+  .forEach(([name, pal], idx) => D(name, 256, 256, (g, w, h) => {
+    const r = rng(91 + idx * 7);
+    g.strokeStyle = idx ? 'rgba(92,78,54,1)' : 'rgba(34,38,26,1)'; g.lineWidth = 2.2;     // cord diamonds (32 px)
+    for (let k = -8; k <= 16; k++) { g.beginPath(); g.moveTo(k * 32, 0); g.lineTo(k * 32 + h, h); g.stroke(); g.beginPath(); g.moveTo(k * 32, 0); g.lineTo(k * 32 - h, h); g.stroke(); }
+    const leaf = (cx, cy, rad, rot, n, col) => {
+      g.fillStyle = col; g.beginPath();
+      for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n, rr = rad * (i % 2 ? .45 + r() * .2 : .8 + r() * .35); const x = cx + Math.cos(a) * rr * 1.25, y = cy + Math.sin(a) * rr * .8; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.closePath(); g.fill();
+    };
+    for (let i = 0; i < 95; i++) {
+      const cx = r() * w, cy = r() * h, rad = 9 + r() * 18, rot = r() * Math.PI, n = 4 + Math.floor(r() * 4), col = pal[Math.floor(r() * pal.length)];
+      for (const dx of [-w, 0, w]) for (const dy of [-h, 0, h]) if (cx + dx > -40 && cx + dx < w + 40 && cy + dy > -40 && cy + dy < h + 40) leaf(cx + dx, cy + dy, rad, rot, n, col);
+    }
+  }));
+// cast iron manhole cover seen from above: raised rim, a non-slip pattern of raised studs and bars, a generic DRAIN legend
+D('manhole', 256, 256, (g, w, h) => {
+  const cx = w / 2, cy = h / 2, R = w / 2 - 2, r = rng(55);
+  g.fillStyle = '#2b2b2a'; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#4a4946'; g.lineWidth = 9; g.beginPath(); g.arc(cx, cy, R - 6, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = '#191918'; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, R - 12, 0, Math.PI * 2); g.stroke();
+  g.save(); g.beginPath(); g.arc(cx, cy, R - 16, 0, Math.PI * 2); g.clip();
+  for (let y = 8; y < h; y += 15) for (let x = 8 + (Math.round(y / 15) % 2) * 7; x < w; x += 14) {   // raised studs with a worn shine
+    g.fillStyle = '#121212'; g.fillRect(x - 3, y - 2, 8, 6);
+    g.fillStyle = r() < .55 ? '#5d5b57' : '#4a4845'; g.fillRect(x - 4, y - 3, 7, 5);
+  }
+  g.restore();
+  g.fillStyle = '#2b2b2a'; rrect(g, cx - 62, cy - 17, 124, 34, 6); g.fill();
+  text(g, 'DRAIN', cx, cy + 1, 28, { color: '#55534f' });
+  for (const a of [.6, 3.74]) { g.fillStyle = '#0d0d0d'; g.beginPath(); g.ellipse(cx + Math.cos(a) * (R - 34), cy + Math.sin(a) * (R - 34), 9, 4, a, 0, Math.PI * 2); g.fill(); }   // lifting keyholes
+  grime(g, w, h, 56, .3);
+});

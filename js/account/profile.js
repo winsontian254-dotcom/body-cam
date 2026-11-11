@@ -21,7 +21,8 @@
        merge(a, b), sanitize(p), fresh(), reset()       (tests / dev)
      }
      LEVEL_MAX, GUN_LEVEL_MAX, LOADOUT_COUNT, NADE_SLOTS, XP, FIRST_WIN, dayKey(ms?), dayNum(key), monthKey(ms?), boardScore(summary)
-   Storage: localStorage lf_profile_v1 (+ lf_profile_v1_u<userId> stashes when another account signs in on this device) and the cloud
+   Storage: localStorage lf_profile_v1 (+ lf_profile_v1_u<userId> stashes when another account signs in on this device, lf_posted_v1 =
+   the best score this device posted per leaderboard, so posts that cannot improve a board are skipped) and the cloud
    save slot 'livefire' (js/account/api.js). Cloud merge: the newest profile is the base (loadouts, names, selection), counters take the
    larger value (XP, stats, per-gun numbers, reward streaks), owned items are united, and credits are kept as two monotonic counters
    (earned, spent) so a purchase on one device and earnings on another both survive. appBus 'profile' { why } on every change,
@@ -404,11 +405,16 @@ function recordMatch(s) {
 }
 const POSTED = 'lf_posted_v1';
 function postedFor(uid) { const o = readLS(POSTED); return o && o.uid === uid && o.b && typeof o.b === 'object' ? o : { uid, b: {} }; }
+const BOARD_CAP = { xp: 50000000, mode: 100000 };      // = SCORE_MAX lfxp / lf in NEON_VIENS/server/worker.js
 async function submitList(list, detail) {
   const p = get(), uid = Account.user() && Account.user().id; if (uid == null) return;
-  for (const [board, sc] of list) {
+  for (const [board, raw] of list) {
+    const xpBoard = board.startsWith('lf:xp');
+    const sc = Math.min(xpBoard ? BOARD_CAP.xp : BOARD_CAP.mode, Math.floor(raw));
     if (!(sc >= 1)) continue;
-    const r = await Account.submitScore(board, sc, board.startsWith('lf:xp') ? { lv: levelOf(p.xp) } : detail(board));
+    // the server keeps each player's best per board and allows 90 posts an hour (shared with Neon Veins): skip what cannot improve it
+    if (sc <= (postedFor(uid).b[board] || 0)) continue;
+    const r = await Account.submitScore(board, sc, xpBoard ? { lv: levelOf(p.xp) } : detail(board));
     if (r && r.error) return false;
     const posted = postedFor(uid); posted.b[board] = Math.max(posted.b[board] || 0, sc); writeLS(POSTED, posted);
   }

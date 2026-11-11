@@ -1,1 +1,23 @@
-/* LIVE FIRE — scoreboard styles */
+/* LIVE FIRE — Tab scoreboard (js/ui/scoreboard.js). */
+.lf-hud .sb2 { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1040px, 95vw); max-height: 90vh; overflow: auto; display: none; padding: 14px 18px 12px;
+  background: rgba(8,9,10,.92); border: 1px solid rgba(236,235,230,.16); border-top: 2px solid rgba(236,235,230,.4); font: 12px/1.35 var(--lf-mono); text-shadow: none; color: #d8d5ce; }
+.lf-hud .sb2.on { display: block; }
+.sb2-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; letter-spacing: .22em; }
+.sb2-head b { font: 700 16px var(--mn-cond, sans-serif); letter-spacing: .3em; color: #fff; margin-right: 14px; } .sb2-head span { color: rgba(236,235,230,.55); }
+.sb2-clk { color: rgba(236,235,230,.7); }
+.sb2-team { margin-bottom: 12px; }
+.sb2-th { display: flex; align-items: baseline; gap: 16px; padding: 4px 6px; border-bottom: 2px solid var(--tc); letter-spacing: .22em; }
+.sb2-th b { color: var(--tc); flex: 1; } .sb2-sc { font: 700 20px var(--lf-mono); color: #fff; } .sb2-al { font-size: 10px; color: rgba(236,235,230,.55); } .sb2-mo { font-size: 11px; color: #8fe29d; }
+.sb2-grid { display: grid; align-items: center; }
+.sb2-grid > span { padding: 3px 8px; border-bottom: 1px solid #17191c; text-align: right; white-space: nowrap; }
+.sb2-grid > span.hd { font-size: 10px; letter-spacing: .16em; color: rgba(236,235,230,.42); border-bottom-color: #222; }
+.sb2-grid > span.nm, .sb2-grid > span.hd:first-child { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.sb2-grid > span.me { background: rgba(240,180,41,.11); color: #fff; } .sb2-grid > span.dead { opacity: .45; }
+.sb2-grid .bt, .sb2-grid .dd { font-style: normal; font-size: .78em; letter-spacing: .12em; color: rgba(236,235,230,.4); }
+.sb2-grid .dd { color: #ff8d86; } .sb2-grid em { font-style: normal; } .sb2-grid em.p { color: #8fe29d; } .sb2-grid em.n { color: #ff8d86; }
+.sb-ic { font-style: normal; display: inline-block; min-width: 1.4em; padding: 0 .25em; margin-right: .45em; font-size: .78em; font-weight: 700; text-align: center; border: 1px solid; }
+.sb-ic.bomb { color: #ffd166; } .sb-ic.kit { color: #8fb6d8; } .sb-ic.vip { color: #ffd166; } .sb-ic.jugg { color: #ff5a4f; } .sb-ic.flag { color: #fff; } .sb-ic.host { color: #ffb14c; }
+.sb2-hist { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; padding-top: 4px; }
+.sb2-hist .lb { font-size: 10px; letter-spacing: .2em; color: rgba(236,235,230,.42); margin-right: 8px; }
+.sb2-hist .rd { width: 1.55em; height: 1.55em; display: grid; place-items: center; font-size: 11px; color: #0a0b0c; background: var(--rc); }
+.sb2-hist .hf { color: rgba(236,235,230,.5); padding: 0 4px; }

@@ -55,8 +55,10 @@ js/game/viewmodel.js       first-person gun + hands rendering, sway, bob, ADS al
 js/game/effects.js         muzzle flash, tracers, shell ejection, impacts/decals by surface, blood
 js/game/bodies.js          placeholder third-person bodies (hitbox capsules in team kit) + world weapon drops (chars worker replaces via setBodyFactory)
 js/game/match.js           match state machine (warmup/freeze/live/roundEnd/halftime/over), teams, score
-js/game/economy.js         money, kill rewards, round bonuses, loss streak
-js/game/objectives.js      bomb, plant/defuse, hostages, flags, zones, dog tags, VIP, gates (lobby doors)
+js/game/economy.js         money, kill rewards, round bonuses, loss streak, buy zones / buy time, gear, round inventories, bot auto-buy
+js/game/objectives.js      (pure JS) bomb, plant/defuse, hostages, flags, zones, dog tags, VIP, juggernaut, gun ladders, hide & seek,
+                           objective markers / prompts / bot goals; ALL state plain data (objectives.s, snapshot / apply)
+js/game/objvis.js          3D visuals + sounds of the objective state (charge, hostages, flags, zone rings, dog tags, explosion)
 js/weapons/data.js         GUNS (50), MELEE, CATEGORIES, getGun(id)   — data only
 js/weapons/attachments.js  ATTACHMENTS, SLOTS, fits(gun, att), effectiveStats(gun, mods) (= applyMods) — data + stat math
 js/weapons/models.js       buildGun(scene, id, opts) -> GunModel (50 guns + 3 melee ids), buildAttachment(...) (all 46)  (procedural, high detail)
@@ -76,7 +78,7 @@ js/maps/validate.js        map checks (spawns free + reachable, objectives prese
 js/maps/defs/<id>.js       one file per map (export default MapDef)
 js/maps/defs/prop_gallery.js  dev map: every prop type laid out in labelled rows (tools/test/props.mjs)
 js/modes/index.js          MODES registry (all 26 ids, `available` flag) + loadMode(id) / getMode(id)
-js/modes/<id>.js           one file per game mode (export default ModeDef)
+js/modes/<id>.js           one file per game mode (export default ModeDef); js/modes/common.js = shared helpers (bombMode base...)
 js/bots/bot.js             bot brain (states, objectives, hiding, grenades), produces commands
 js/bots/aim.js             human-like aim (reaction, tracking error, recoil control) by difficulty
 js/chars/human.js          third-person character (Neon Veins human kit + tactical gear, team colours)
@@ -99,8 +101,9 @@ js/ui/menu.js              title + main menu (Play, Armory, Rewards, Profile, Se
 js/ui/play.js              play hub: quick match, server browser, host, join code, practice vs bots
 js/ui/lobby.js             match lobby (teams, map/mode, bots, chat, ready, start)
 js/ui/hud.js               in-match HUD (health/armor/ammo/crosshair/killfeed/radar/timer/objectives)
-js/ui/buy.js               buy menu (economy modes)
+js/ui/buy.js               buy menu (economy modes; free armory in practice)
 js/ui/scoreboard.js        Tab scoreboard
+js/ui/modehud.js           mode / objective HUD layer: objective strip, world markers, action bar, prompts, money, notices, MVP card
 js/ui/armory.js            loadouts, 3D gun inspect, attachments, skins
 js/ui/rewards.js           daily rewards screen
 js/ui/settings.js          settings screens (graphics, audio, controls/keybinds, crosshair, gameplay)
@@ -264,7 +267,10 @@ class Game {
 // suppressed, pellets, seq, kick, ads }; 'impact' { point, normal, surf, gun, exit, shooter, dir, id (collider), melee, pellets };
 // 'whiz' { p, point, from, dist }; 'bullet:body' { point, dir, victim, group, dmg, melee, friendly }; 'melee' { p, kind, gun, side };
 // 'dry' { p, gun }; 'firemode' { p, mode }; 'inspect' { p }; 'drop' / 'pickup' { p, drop }; 'use' { p }; 'mantle' { p, kind };
-// 'phase' { phase, prev }; 'halftime'; 'round:reset' (new round: clear decals, drops...); 'player:join' / 'player:leave' { p };
+// 'phase' { phase, prev }; 'halftime' { kind 'half'|'ot', ot }; 'round:reset' (new round: clear decals, drops...); 'player:join' / 'player:leave' { p };
+// Modes (§8): 'round:end' also { title, sub, mvp, mvpName, mvpReason, score }; 'match:end' also { mvp, mvpName, teamStats, rounds, ot };
+// 'match:point' { team (3 = both), round }; 'overtime' { n }; 'team:balance' { p, from, to }; 'objective' { kind, action, p?, actor, team, ... }
+// ('p' set = it counts as an objective for XP); 'money' { p, delta, why, money }; 'buy' { p, item, price, refund }; 'bomb:explode' { x, y, z, planter }.
 // 'game:ready'; 'game:end' { reason }.
 ```
 Game extras (CORE B): `createGame` cfg also takes `quality` (tier override), `onProgress(stage, k)` and options `{ infiniteAmmo,
@@ -279,7 +285,13 @@ rendering: headless tests), `stats()`. Systems may also have `late(dt)` (after r
 system)` (exported by game.js) swaps the third-person bodies; the system needs `add(p)`, `remove(p)`, `muzzleOf(p, out)`, `casters()`.
 Spawns: round starts use lobby spawns (random free one); respawns score every field spawn by distance to live enemies (and -45 if an
 enemy sees it, navgrid LOS); FFA uses team 0 spawns. Spawn protection (ModeDef.spawnProtect, respawns only) ends early on firing.
-Lobby gates: closed in warmup / freeze (round modes: every round; respawn modes: round 1), opened when the round goes live.
+Lobby gates: closed in freeze (round modes: every round; respawn modes: round 1), opened when the round goes live (mode.openGates may
+open them per team: hide & seek / infection hold one side); open during warmup (free roam with respawns).
+Objective hooks (modes worker): `game.addCommandFilter(fn(p, cmd, dt)) -> off` runs on every simulated player's command right after it
+is built (match.js registers objectives.filter: it copies the raw buttons to `p.ibtn` (the net layer sets `p.ibtn` for remote players
+on the host) and locks movement / fire while planting, defusing, picking up a hostage or held); movement speed is
+`moveSpeed(p) * (p.speedMul || 1)` (hostage carriers, VIP, juggernaut, infected); `p.noPickup` blocks weapon pickups; `game.objvis`
+(js/game/objvis.js) draws the objective state; `game.economy` / `game.objectives` are created by the Match.
 
 ### PlayerState (plain, serialisable) — js/game/player.js createPlayer()
 ```js
@@ -469,7 +481,11 @@ module that imports models.js (models.js never imports it back); reusable helper
   (+Y toward the tip, +Z toward the edge), tip, edge [node, node], pommel, setMods() (no-op), dispose() }. Melee-local axes: +Z along
   the blade / handle toward the tip or head, -Y = cutting edge, origin at the hand.
 * Kit additions: `K.boxes = []` records a box per emitted primitive (lathes: one per profile band) for clip tests; `K.warpZ(o)`;
-  `loft3(rows, { uvSwap })` (wood grain along the rows); `extrude(.., { fall: false })`. `cloneTemplate(root, instance)` is exported.
+  `loft3(rows, { uvSwap })` (wood grain along the rows; u runs around each row by that row's own perimeter, so rows of very
+  different size do not stretch the texture); `extrude(.., { fall: false })`. `cloneTemplate(root, instance)` is exported.
+  models.js helper `profLoft(K, sideProfile, { hw(z, t), rt, rb, n, pad })`: a z-monotone side outline lofted with a rounded
+  cross-section (half width by height fraction t, top / bottom corner radii) instead of a flat-sided extrusion — bullpup shells and
+  synthetic stocks; it returns `{ cut(z), half(z, y) }` (mm) so panels, ports and sling sockets can be laid on the surface.
 
 **Attachments (part B).** `ATTACH_SPECS[attId]` (extra model params merged over attachments.js `model`) and
 `registerAttachmentBuilder(attId | 'kind:' + model.kind, fn)` with `fn(K, att, ctx) -> { eye?, length?, lens?, hand?, palette? }`:
@@ -625,7 +641,7 @@ views to tools/test/out/maps/<id>/. `js/maps/defs/dev_range.js` is the test map 
 
 ### Props (js/maps/props.js + js/maps/props/*.js) — the full list with sizes and options: docs/PROPS.md
 ```js
-B.prop(type, x, y, z, { ry, s, variant /*name | 'random' (seeded by position)*/, seed, collide = true, hide = false, inst = false, cast = true, ...type opts })
+B.prop(type, x, y, z, { ry, s, variant /*name | 'random' (seeded by position)*/, seed, collide = true, hide = false, inst /*auto*/, cast = true, ...type opts })
 // -> props.js placeProp(): returns the first collider id (or -1). Exports: PROPS { type: { size, cat, desc, variants, opts, scan, build } },
 //    placeProp, propList() -> [{ type, cat, size, desc, variants, opts, scan, alias }], propSize(type, opts) -> [w, h, d] (real extents),
 //    propKit(type, opts) -> Kit (geometry, no placement; tests), RAIL_TOP = .39 (rail head above a 'track' prop's origin)
@@ -645,7 +661,11 @@ B.prop(type, x, y, z, { ry, s, variant /*name | 'random' (seeded by position)*/,
   cannot see through it, bullets pass cheaply; systems that should ignore foliage (grenade bounces) pass `skipTag: 'foliage'` to rays.
 * Hide-spot hints: props that make natural hiding places carry a hint (kind car / crates / bush / grass / closet / vent / dark / under /
   roof) that is registered with B.hide only when the placement passes `hide: true` (validate.js checks every hide is reachable).
-* Materials: library materials + extra `p_*` library entries registered by kit.js at import (car paints with clear coat, plastics,
+  Cover walls (jersey_barrier, sandbags, hesco, crate_stack) put theirs on the -z side: turn them so +z faces the threat.
+  docs/PROPS.md lists, per type, the triangle count, `no collider` and the hide kinds.
+* Materials: library materials + extra `p_*` library entries registered by kit.js at import (car paints with clear coat, satin paint
+  coats on the even steel set (inside a kit the library `paint_*` / `metal_painted` are swapped for `p_coat_*`: kit.js MAT_ALIAS), plastics
+  on the rubber stipple set,
   fabrics, flat paints, chrome / alu / galvanised / stainless, glass tints, emissive amber / blue / cyan, woods, precast concrete,
   ballast, rock, sandbag, hay...; they get the LF surface shader: wetness, sky occlusion). Custom per-scene materials: `p_foliage`
   (alpha-cut card atlas assets/models/tex/foliage.jpg + foliage_a.jpg, composed from CC0 ambientCG atlases by tools/fetch-props.py),
@@ -674,16 +694,85 @@ export default {  // ModeDef
   winRounds, roundTime, freezeTime, buyTime, economy: bool, loadouts: bool, timeLimit, scoreLimit,
   maxPlayers, minPlayers, objectives: ['bomb'|'hostage'|'flags'|'zones'|'tags'|'vip'|...], sizes: ['S','M','L'],
   setup(game), tick(game, dt), onSpawn(game, p), onKill(game, info), onRoundStart(game), onRoundEnd(game, r),
-  hud(game) -> { top, bottom, markers: [{ pos, label, color }] } /*extra HUD text/markers*/, score(game) -> sortable rows
+  hud(game) -> { top, bottom, clock?, clockAlert?, markers, extraMarkers? } /*extra HUD text; markers = objectives.markers(viewer)*/,
+  score(game) -> sortable rows, botGoal(game, bot) -> BotGoal | null
 }
 ```
 ModeDef extras read by js/game/match.js: warmupTime, roundEndTime (5), halftimeTime (6), spawnProtect, elimination (round modes,
-default true), teamScoreOnKill (timed team modes, default true), spawnLobbyEveryRound, checkWin(game) -> winner|null, onRoundTime(game)
--> winner (default: team 2), defaults { option: value } (game options, e.g. practice { infiniteAmmo: true }). Match (game.match):
-phase, t, round, roundsPlayed, score { 1, 2 }, winner, roundWinner, reason, half, swapped, timeLeft, limit, elapsed;
-start(), tick(dt), endRound(winner, reason), endMatch(winner, reason), addScore(team, n), respawnIn(p, s), alive(team),
-teamPlayers(team), leader(), isFrozen(), snapshot() / apply(snap) (net). Default scoring: kill +2, assist +1, suicide -1; timed team
-modes add a team point per kill; FFA ends at scoreLimit kills; halftime after half the rounds swaps teams 1 <-> 2 and the scores.
+default true), teamScoreOnKill (timed team modes, default true), spawnLobbyEveryRound, defaults { option: value } (game options, e.g.
+practice { infiniteAmmo: true }), overtime { rounds, money } (tie at full time -> overtime halves), halftime: false (no side swap),
+swapEveryRound, autoBalance: false, teamNames { 1, 2, plural }, economy / freeBuy / buyTime / startMoney / maxMoney, noPickup, hardcore
+(HUD hides crosshair, vitals, ammo, hit marker), columns [{ key, label, get(p, game) }] (scoreboard), ffaSort(a, b, game).
+Hooks (all optional): checkWin(game) -> winner | { winner, reason } | null (replaces the default elimination check), onRoundTime(game)
+-> winner | { winner, reason } (default: team 2, 'time'), matchWinner(game) (timed / FFA end on time), beforeRound(game) (team assignment
+before the round's spawns), openGates(game) (go-live), onLive(game), spawnSpot(game, p, 'round'|'respawn') -> spot | null,
+respawnTime(game, p) -> seconds | null (never), canRespawn(game, p) -> bool (holds a respawn; p.respawnWait = HUD text),
+canBuy(game, p) -> { ok, reason }. Per-game mode state goes in `game.objectives.s.info` / `.team` (plain, replicated), NEVER on the
+ModeDef object (loadMode caches it for every match).
+
+Match (game.match, js/game/match.js): phase ('warmup' 'freeze' 'live' 'roundEnd' 'halftime' 'over'), t, round, roundsPlayed, score
+{ 1, 2 }, winner, roundWinner, reason, half, swapped, timeLeft, limit { ..., buyTime, ot }, elapsed, liveFor, ot (overtime number), inter
+('half'|'ot'), planted, mvp, history [{ round, winner, reason, mvp }]; start(), tick(dt), endRound(winner, reason), endMatch(winner,
+reason), addScore(team, n), respawnIn(p, s), alive(team), teamPlayers(team), leader(), isFrozen(), winTarget(), matchPoint(), teamName(t),
+banner(winner, reason), scoreboard(viewer) -> { mode, map, round, rounds, phase, ot, teams: [{ team, name, color, score, alive, money
+(own side only), players: [{ id, name, team, bot, local, alive, kills, deaths, assists, hs, hsp, dmg, adr, score, mvps, money (null =
+hidden), ping, icons, extra }] }], columns, history, economy, roundModes, time }, teamStats(), snapshot() / apply(snap) (net: includes
+`obj` = objectives state and `econ` = loss streaks; PlayerState.money / ms / ibtn / busy / carry / flag / vip / jugg / hold / blind /
+hidden / speedMul / noPickup / maxHp / respawnWait must travel with the players).
+Flow: warmup (free roam, respawns, max money) -> per round: auto-balance (bots first, round modes) -> mode.beforeRound -> lobby spawns
+behind closed gates (economy: survivors keep weapons / nades / armour, refilled; the dead get the side pistol: 'vogt9' attack,
+'shizuka' defence) -> objectives.roundStart (charge to a random attacker, hostages reset, VIP chosen...) -> bot auto-buy -> 'match:point'
+-> freeze (buy time) -> live (gates open; buy for mode.buyTime more seconds) -> round end (economy bonuses, round MVP: planter /
+defuser / VIP / top rescuer / most kills (damage breaks ties) on the winning side, banner title + sub) -> next round, halftime (swap
+sides, money + loss streaks reset, inventories reset) or overtime (tie at full time: halves of ot.rounds, $ot.money, first to
+rounds/2 + n*ot.rounds/2 + 1) -> match end (match MVP, team stats). Late join: money = start; joining during freeze spawns at once,
+later waits for the next round (respawn modes spawn at once). Default scoring: kill +2, assist +1, suicide -1; timed team modes add a
+team point per kill (unless teamScoreOnKill: false); FFA ends at scoreLimit kills; objective actions add score (plant / defuse +3,
+rescue +4, flag cap +10, zone cap +5, confirm +5, deny +3).
+
+Economy (game.economy, js/game/economy.js; ECON): start $800, max $16000, round win $3250 (elimination / time) or $3500 (charge
+detonated / defused, hostages rescued, VIP extracted), loss ladder $1400 / 1900 / 2400 / 2900 / 3400 (a win takes one step off),
+attackers alive at a time-out loss get nothing, the planting side gets +$800 each when it loses after a plant, planter / defuser +$300,
+rescuer +$1000 (team +$300), hostage hurt -$10 per hp, killed -$1000, kill rewards = gun.killReward (knife $1500, grenades $300),
+overtime $10000. Buy zones = map.buyzones[team] (default: the lobby), buy time = freeze + buyTime of live (Infinity in warmup / free buy).
+Gear: kevlar $650, kevlar + helmet $1000 ($350 helmet only with a full vest), defuse kit $400 (defenders, bomb modes). Grenades obey
+grenades/data.js canCarry (NADE_RULES). Bought guns get the attachments of the player's loadout for that gun (loadout.mods[gunId]).
+`buy(p, id) / refund(p, id) / canBuy(p) / itemState(p, id) / autoBuy(p) / requestDrop(p, gunId) / teamMoney(team)`; a client buys
+through `game.net.buy(id, opts)` when the net layer provides it (the host runs `economy.buy` for that player). Bots get `autoBuy` at round
+start unless `game.bots.handlesBuy` is true.
+
+Objectives (game.objectives, js/game/objectives.js; all state in `objectives.s`, plain): charge (BOMB: plant 3.2 s inside a site rect
+holding USE or FIRE with slot 5, 40 s fuse, defuse 10 s / 5 s with a kit within 1.4 m holding USE, blast 500 dmg Gaussian sigma 9.5 m
+through game.damage with the planter as attacker so the attacking side takes no harm, drop with G / on death, pick up by walking over
+it), hostages (hold USE 1.6 s within 1.5 m, carried one at a time at 82% speed, rescue zone, bullets / blasts hurt idle hostages),
+flags (touch to take / return, capture at your own flag at home, auto return 30 s), zones (signed control c -1..1: capTime alone,
+x1.5 / x2 with more team-mates, neutralising an enemy zone takes half the capTime, contested freezes, empty decays to the owner; `instant`
+= hardpoint), dog tags (confirm +1 team point / deny, 60 s), VIP (pistol + armour, extraction 2.5 s), juggernaut (400 hp, LMG), gun
+ladders (GG_LADDER, RUSH_LADDER), sharpshooter rotation (seeded), hide & seek head start (p.hold, p.blind, p.hidden). HUD helpers:
+markers(viewer), progress(viewer), prompt(viewer).
+
+**BotGoal** (mode.botGoal(game, bot) for the bots worker; most modes return game.objectives.botGoal(bot)):
+`{ kind, pos: { x, y, z } | null, target?: playerId | objective id, urgency: 0..1, radius?: arrive within (m), use?: true (hold USE
+when there: plant / defuse / pick up a hostage), site?, zone?, crouch?, melee?, self? }`. kind: 'attack' (go to pos: dropped charge,
+dog tag), 'defend' (hold around pos: a site, a hostage, your flag, an extraction point), 'plant' (carrier: go to the site, hold USE inside
+the rect), 'defuse' (go to the charge, hold USE), 'escort' (stay near target: the carrier, the VIP; the VIP itself gets self: true and an
+extraction point), 'capture' (stand in a zone), 'hold' (stay in a held zone / defensive spot), 'hunt' (go to pos / target: enemies,
+the juggernaut, a flag carrier, survivors for the infected (melee)), 'hide' (hider: a distinct hide spot, crouch still; urgency 1 during
+the head start), 'seek' (seeker: check hide spots), 'flag' (take the enemy flag / bring it home), 'return' (touch your dropped flag),
+'rescue' (go to a hostage and hold USE / carry it into a rescue zone), 'roam' (no objective). TDM-like modes give a 'hunt' toward a map
+point that rotates every 25 s (no knowledge of enemy positions).
+
+Modes (all 26 available; defaults, every one can be overridden by cfg.options): tdm (10 min / 75), ffa (10 min / 30 kills),
+demolition (24 rounds MR12, 115 s, 12 s freeze, 20 s buy, economy, MR3 overtime $10000), wingman (one site, 16 rounds, 90 s, economy),
+retake (charge pre-planted, attackers spawn on the site, defenders 24-46 m away, fixed kits, 16 rounds), snd (no economy, loadouts, plant
+4 s, fuse 45 s, defuse 7.5 s, 12 rounds, sudden death), elimination (12 rounds, time-out: more alive wins), hostage (economy, 2 rescues
+win, 16 rounds), domination (A B C, 1 pt / zone / 2.5 s, 200), hardpoint (hp1-5 rotating every 60 s, 1 pt/s alone, 250), koth (hill,
+5 s capture, 1 pt/s with presence, 150), headquarters (8 s capture, owners score 1/s and cannot respawn, destroy -> new HQ in 10 s, 250),
+ctf (3 captures), killconfirmed (65), gungame (17 guns + knife, knife kills demote), gunrush (team ladder, a level per half-team kills),
+infection (1 infected per 8, knife, 150 hp, survivors who die turn, 6 rounds), hideseek (30 s head start, seekers blindfolded, teams swap
+every round), vip (extract1.., 12 rounds), juggernaut (points: +2 as jugg, +3 killing it, +1 otherwise; 30), oitc (1 round, one-hit
+kills, 3 lives), sharpshooter (one shared gun, rotates every 45 s, 25 kills), snipers (bolt-action only), blades (melee only), hardcore
+(30 hp, no HUD), practice (free armory: B buys anything, free, anywhere).
 Mode ids: tdm ffa demolition hostage wingman retake snd elimination domination hardpoint koth ctf
 killconfirmed gungame gunrush infection hideseek vip juggernaut oitc sharpshooter headquarters snipers
 blades hardcore practice.
@@ -781,6 +870,8 @@ export const Account = { init(), member(), user(), server(), setServer(url|''), 
 // Leaderboards: lf:<mode>:<YYYY-MM UTC> and lf:<mode>:all = best match score (profile.js boardScore, cap 100000);
 // lf:xp:<YYYY-MM> / lf:xp:all = XP (cap 50M). The deployed server rejects them (400 'Unknown board.') until the NEON_VIENS worker
 // change is deployed: getBoard / submitScore then return { error: NO_BOARDS } ('Leaderboards are not available yet.').
+// The server allows 90 score posts an hour per player (shared with Neon Veins): profile.js skips posts that cannot beat what this
+// device already posted for that account (localStorage lf_posted_v1) and clamps to the server caps.
 // profile.js (full header in the file)
 export const Profile = { init(), load(), get(), save(why), onChange(fn(p, why)) -> off, level(), levelInfo(xp?), xpToNext(),
   xpForLevel(L), levelOf(xp), addXP(n, why) -> gain, addCredits(n, why), credits(), spend(n) -> bool,

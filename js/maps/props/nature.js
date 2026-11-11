@@ -89,13 +89,14 @@ function tree(K, o, v, rnd) {
 function bush(K, o, v, rnd) {
   if (v === 'hedge') {
     const L = o.len || 3, H = o.h || 1.8, D = o.d || .9;
-    K.box('p_leaf_core', 0, .02, 0, L - .25, H - .2, D - .25);
+    K.box('p_hedge_core', 0, .02, 0, L - .14, H - .14, D - .16, { bev: .06 });   // a dense green core close behind the leaf cards
     const step = .45;
-    for (let x = -L / 2 + step / 2; x < L / 2; x += step) for (let y = .45; y < H; y += step) for (const s of [-1, 1]) {
+    for (let x = -L / 2 + step / 2; x < L / 2; x += step) for (let y = .45; y < H - .25; y += step) for (const s of [-1, 1]) {
       const k = .75 + rnd() * .3; K.card(x + (rnd() - .5) * .15, y + (rnd() - .5) * .1, s * (D / 2 - .05 + rnd() * .08), .75, .75, rnd() < .7 ? 1 : 0, { ry: (s > 0 ? 0 : PI) + (rnd() - .5) * .8, rx: (rnd() - .5) * .6, rz: rnd() * TAU, n: [0, .3, s], col: [k * .85, k, k * .85] });
     }
-    for (let x = -L / 2 + step / 2; x < L / 2; x += step) for (let z = -D / 2 + .2; z < D / 2; z += .4) { const k = .9 + rnd() * .25; K.card(x, H - .05, z, .8, .8, 1, { rx: PI / 2 + (rnd() - .5) * .5, rz: rnd() * TAU, n: [0, 1, 0], col: [k * .85, k, k * .85] }); }
-    for (const s of [-1, 1]) for (let y = .4; y < H; y += step) for (let z = -D / 2 + .2; z < D / 2; z += .4) K.card(s * (L / 2 - .05), y, z, .7, .7, 1, { ry: s * PI / 2 + (rnd() - .5) * .6, rz: rnd() * TAU, n: [s, .3, 0], col: [.8, .95, .8] });
+    for (let x = -L / 2 + step / 2; x < L / 2; x += step * .75) for (let z = -D / 2 + .18; z < D / 2; z += .3) { const k = .9 + rnd() * .25; K.card(x + (rnd() - .5) * .1, H - .13 + rnd() * .04, z, .7, .7, 1, { rx: PI / 2 + (rnd() - .5) * .3, rz: rnd() * TAU, n: [0, 1, 0], col: [k * .85, k, k * .85] }); }
+    for (let x = -L / 2 + step / 2; x < L / 2; x += step) for (const s of [-1, 1]) { const k = .85 + rnd() * .25; K.card(x + (rnd() - .5) * .15, H - .16, s * (D / 2 - .1), .7, .6, 1, { ry: s > 0 ? 0 : PI, rx: -.75, rz: rnd() * TAU, n: [0, .8, s * .6], col: [k * .85, k, k * .85] }); }   // rounded top edges
+    for (const s of [-1, 1]) for (let y = .4; y < H - .3; y += step) for (let z = -D / 2 + .2; z < D / 2; z += .4) K.card(s * (L / 2 - .05), y, z, .7, .7, 1, { ry: s * PI / 2 + (rnd() - .5) * .6, rz: rnd() * TAU, n: [s, .3, 0], col: [.8, .95, .8] });
     K.col(0, 0, 0, L - .2, H - .1, D - .2, { surf: 'grass', tag: 'foliage' });
     K.hide(0, 0, -D / 2 - .5, 'bush', .6);
     return;

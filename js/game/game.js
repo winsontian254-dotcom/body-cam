@@ -12,6 +12,8 @@
        PlayerState), local (the local PlayerState), localId, authority, time, tick, rng, options, drops, env, fx, view { yaw, pitch },
        ready, ended, paused
        addSystem(sys) / getSystem(name) / removeSystem(sys)   sys = { name, tick?(dt), frame?(dt, alpha), late?(dt), dispose?() }
+       addCommandFilter(fn(p, cmd, dt)) -> off   runs on every simulated player's command after it was built (objectives: p.ibtn,
+         plant / defuse locks, held seekers); movement uses moveSpeed(p) * p.speedMul; p.noPickup blocks weapon pickups
        addPlayer({ name, team, bot, id, skill, loadout, remote }) -> PlayerState,  removePlayer(id)
        spawn(p, spot?, { lobby, round }) (picks a spawn: lobby spawns at round start, field spawns far from and out of sight of
          enemies on respawn, team 0 spawns in FFA),  pickSpawn(p, opts) -> spot
@@ -24,7 +26,8 @@
        debugStep(seconds)  advance the simulation synchronously (64 Hz ticks, no rendering) — headless tests
        stats() -> summary   end(reason)   dispose()
      setBodyFactory(fn)    third-person characters: fn(scene, game) -> system (default: js/game/bodies.js placeholder bodies);
-                           js/chars/human.js registers itself here when it exists
+                           js/chars/human.js registers itself here when it exists (charsReady); a system with a `ready`
+                           promise is awaited before the match starts
      Audio, audioReady     a proxy of js/audio/audio.js Audio (loaded lazily; calls are no-ops until it has loaded or if it fails)
    Authority: 'local' and 'host' simulate everything here (host: game.net.tick(game, dt) broadcasts); 'client' only predicts the
    local player's movement and weapon (remote players have p.remote = true and are written by the net layer), detects its own hits
@@ -58,6 +61,7 @@ import { CameraRig } from './camera.js';
 import { Viewmodel } from './viewmodel.js';
 import { Effects } from './effects.js';
 import { Bodies } from './bodies.js';
+import { ObjectiveVisuals } from './objvis.js';
 import { DEFAULT_LOADOUT, GUNS, getGun } from '../weapons/data.js';
 import { initGunKit } from '../weapons/models.js';
 
@@ -75,6 +79,9 @@ export const audioReady = import('../audio/audio.js').then(m => { audioImpl = m.
 
 let bodyFactory = (scene, game) => new Bodies(scene, game);
 export function setBodyFactory(fn) { if (typeof fn === 'function') bodyFactory = fn; }
+/* the real characters (js/chars/human.js) replace the placeholder bodies; a broken or missing module keeps the placeholders */
+export const charsReady = import('../chars/human.js').then(m => { if (m.createCharacters) setBodyFactory(m.createCharacters); })
+  .catch(e => console.warn('[game] characters unavailable: ' + ((e && e.message) || e)));
 
 const BOT_NAMES = ['Kowalski', 'Reyes', 'Haddad', 'Lindqvist', 'Okafor', 'Brandt', 'Moreau', 'Tanaka', 'Novak', 'Duarte', 'Sato', 'Ferris',
   'Quinn', 'Varga', 'Mbeki', 'Castellan', 'Ilves', 'Rourke', 'Achterberg', 'Petrov', 'Salo', 'Whitlock', 'Oyelaran', 'Kask'];
@@ -100,7 +107,7 @@ export class Game {
     this.players = new Map(); this.systems = []; this.cmds = new Map(); this.drops = [];
     this.time = 0; this.tick = 0; this.localId = null; this.local = null; this.ready = false; this.ended = false; this.paused = false;
     this.menuOpen = false; this.override = null; this.view = { yaw: 0, pitch: 0 }; this.net = cfg.net || null; this.spectate = null;
-    this.offs = []; this.botN = 0; this._bodies = []; this._ent = [];
+    this.offs = []; this.botN = 0; this._bodies = []; this._ent = []; this.cmdFilters = [];
   }
 
   progress(stage, k) { if (this.cfg.onProgress) { try { this.cfg.onProgress(stage, k); } catch (e) { /* UI only */ } } }
@@ -144,8 +151,11 @@ export class Game {
     this.addSystem(this.rig);
     this.bots = this.addSystem(new BotManager(this));
     this.effects = this.addSystem(new Effects(scene, this));
+    await charsReady;
     this.bodies = this.addSystem(bodyFactory(scene, this));
+    if (this.bodies && this.bodies.ready) { this.progress('characters', 0.78); await this.bodies.ready; }
     this.viewmodel = this.addSystem(new Viewmodel(scene, this, this.rig));
+    this.objvis = this.addSystem(new ObjectiveVisuals(scene, this));     // charge, hostages, flags, zones, tags (objectives.js state)
     this.addSystem(new SoundSystem(this));
     // players
     this.match = new Match(this, this.mode, this.options);
@@ -180,6 +190,7 @@ export class Game {
   addSystem(sys) { if (sys && !this.systems.includes(sys)) this.systems.push(sys); return sys; }
   getSystem(name) { return this.systems.find(s => s && s.name === name) || null; }
   removeSystem(sys) { const i = this.systems.indexOf(sys); if (i >= 0) this.systems.splice(i, 1); try { sys.dispose && sys.dispose(); } catch (e) { console.error(e); } }
+  addCommandFilter(fn) { this.cmdFilters.push(fn); return () => { const i = this.cmdFilters.indexOf(fn); if (i >= 0) this.cmdFilters.splice(i, 1); }; }
 
   // ------------------------------------------------------------------------------------------------ players
   addPlayer(o = {}) {
@@ -367,6 +378,7 @@ export class Game {
       else clearCommand(cmd, p.yaw, p.pitch);
       p.frozen = frozen;
       if (frozen) { cmd.mx = 0; cmd.mz = 0; cmd.buttons &= ~(BTN.FIRE | BTN.JUMP | BTN.ADS | BTN.LEANL | BTN.LEANR); }
+      for (let i = 0; i < this.cmdFilters.length; i++) this.cmdFilters[i](p, cmd, dt);     // objectives (match.js / objectives.js)
       p.lastCmdSeq = cmd.seq;
       if (p.spawnProtect > 0) { p.spawnProtect = Math.max(0, p.spawnProtect - dt); if (cmd.mx || cmd.mz) p.spawnProtect = Math.max(0, p.spawnProtect - dt * 2); }
       if (p.flash > 0) p.flash = Math.max(0, p.flash - dt);
@@ -379,7 +391,7 @@ export class Game {
         b.x = q.pos.x; b.y = q.pos.y; b.z = q.pos.z; b.h = 1.8 - 0.55 * (q.crouch || 0); nb++;
       }
       bodies.length = nb;
-      const ev = applyMovement(world, p, cmd, dt, moveSpeed(p), nb ? bodies : null);
+      const ev = applyMovement(world, p, cmd, dt, moveSpeed(p) * (p.speedMul || 1), nb ? bodies : null);
       updateGait(p, dt);
       if (ev.footstep) this.bus.emit('footstep', { p, surf: ev.footstep, loud: ev.loud });
       if (ev.jumped) this.bus.emit('jump', { p });
@@ -393,7 +405,7 @@ export class Game {
       // drop / use (edges against the previous buttons), then the weapon
       const prevB = p.ws.btn, pressed = cmd.buttons & ~prevB;
       if ((pressed & BTN.DROP) && !frozen) dropWeapon(this, p, p.cur);
-      if (this.drops.length) tryPickup(this, p, !!(pressed & BTN.USE));
+      if (this.drops.length && !p.noPickup) tryPickup(this, p, !!(pressed & BTN.USE));
       if (pressed & BTN.USE) this.bus.emit('use', { p });
       weaponTick(this, p, cmd, dt);
       if (p.alive && p.pos.y < minY) this.damage(p, { attacker: null, dmg: 1000, kind: 'world', group: 'chest' });
@@ -444,6 +456,7 @@ export class Game {
     if (this.controls) this.controls.dispose();
     for (const s of this.systems.slice().reverse()) { try { s.dispose && s.dispose(); } catch (e) { console.error('[game] system dispose failed', e); } }
     this.systems.length = 0;
+    try { if (this.match && this.match.dispose) this.match.dispose(); } catch (e) { console.error(e); }
     try { if (this.fx) this.fx.dispose(); } catch (e) { console.error(e); }
     try { if (this.env && this.env.dispose) this.env.dispose(); } catch (e) { console.error(e); }
     try { if (this.map && this.map.dispose) this.map.dispose(); } catch (e) { console.error(e); }

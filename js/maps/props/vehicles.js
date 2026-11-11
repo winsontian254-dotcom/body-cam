@@ -461,7 +461,8 @@ function airliner(K, o, v, rnd) {
   }
   for (const s of [-1, 1]) K.decal('air_reg', s * (R * .93 + .012), yc0 - .5, -hl + 7.2, 1.2, .3, { face: s > 0 ? 'e' : 'w' });
   // colliders: fuselage segments, wings, engines, gear legs, fin
-  for (let z = -hl + 3; z < hl - 1; z += 4) K.col(0, yc0 - R * .9, z + 2, R * 2, R * 1.9, 4, { surf: 'sheetmetal' });
+  for (let z = -hl + 3; z < hl - 3; z += 4) K.col(0, yc0 - R * .9, z + 2, R * 2, R * 1.9, 4, { surf: 'sheetmetal' });
+  K.col(0, yc0 - R * .78, hl - 2.4, R * 1.55, R * 1.5, 2.2, { surf: 'sheetmetal' });   // the tapering nose
   for (const s of [-1, 1]) {
     for (const [x0, x1, zc, c] of [[1, 6, 0, 5.2], [6, 11, -1.7, 3.6], [11, 16.5, -3.6, 2.4]]) K.col(s * (x0 + x1) / 2 + s * .8, yc0 - 1.5, zc + 1.0 - (c - 4) * .1, x1 - x0, .6, c, { surf: 'sheetmetal' });
     K.col(s * 5.8, yc0 - 3.4, 3.6, 2.0, 2.0, 4.0, { surf: 'metal' });

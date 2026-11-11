@@ -108,10 +108,10 @@ GV.show = (id, o = {}) => {
   return info;
 };
 GV.view = (name = current.view, o = {}) => {
-  current.view = name; const gm = GV.gm; if (!gm) return;
+  engine.resize(); current.view = name; const gm = GV.gm; if (!gm) return;
   const b = bounds(gm), L = Math.max(b.size.z, b.size.y * 1.7), fit = L / 2 / Math.tan(cam.fov / 2) * 1.12;
   const V = {
-    side: [0, Math.PI / 2, 1.0], left: [Math.PI, Math.PI / 2, 1.0], '34': [.78, 1.18, 1.05], rear34: [-.85, 1.12, 1.0], front: [Math.PI / 2, 1.5, .9],
+    side: [0, Math.PI / 2, 1.0], left: [Math.PI, Math.PI / 2, 1.0], '34': [.78, 1.18, .82], rear34: [-.85, 1.12, 1.0], front: [Math.PI / 2, 1.5, .9],
     top: [0, .02, 1.0], close: [.55, 1.25, .26], fp: [-1.42, 1.36, .62], under: [.6, 2.2, 1.0],
   }[name] || [0, 1.2, 1];
   // the target first: setting ArcRotateCamera.target rebuilds alpha / beta / radius from the current position
@@ -120,7 +120,7 @@ GV.view = (name = current.view, o = {}) => {
 };
 function closeTarget(gm, b) { const e = gm.eject; if (!e) return b.c; e.computeWorldMatrix(true); const p = e.getAbsolutePosition(); return new BABYLON.Vector3(b.c.x, p.y - .01, p.z - .02); }
 GV.sheet = (list, o = {}) => {
-  clear(); cyc.setEnabled(false);
+  engine.resize(); clear(); cyc.setEnabled(false);   // resize first: a viewport change since the last frame leaves a stale aspect
   const ids = list === 'modelled' ? Object.keys(MODEL_SPECS) : list === 'all' ? GUNS.map(g => g.id) : GUNS.filter(g => g.cat === list).map(g => g.id);
   const gms = ids.map(id => { const gm = buildGun(scene, id, { lod: current.lod, skin: current.skin }); GV.models.push(gm); for (const m of gm.root.getChildMeshes(false)) sg.addShadowCaster(m, false); return gm; });
   const bs = gms.map(bounds), maxZ = Math.max(...bs.map(b => b.size.z)), maxY = Math.max(...bs.map(b => b.size.y));
@@ -143,7 +143,7 @@ GV.sheet = (list, o = {}) => {
   return ids;
 };
 GV.grid = (entries, o = {}) => {
-  clear(); cyc.setEnabled(false);
+  engine.resize(); clear(); cyc.setEnabled(false);
   const cols = o.cols || Math.ceil(Math.sqrt(entries.length * 1.6)), rows = Math.ceil(entries.length / cols), aspect = engine.getAspectRatio(cam);
   const cellW = 1, cellH = o.cellH || .42, fill = o.fill || .86;
   entries.forEach((e, k) => {

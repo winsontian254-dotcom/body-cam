@@ -21,10 +21,11 @@ function jersey(K, o, v, rnd) {
   for (const x of [-L / 2 + .45, L / 2 - .45]) K.box('p_plastic_dark', x, 0, 0, .2, .07, .62);
   if (rnd() < .5) K.decal('graffiti_2', 0, .45, .27, 1.4, .5, { rx: .3 });
   K.col(0, 0, 0, L, .81, .5, { surf: 'concrete' });
+  K.hide(0, 0, -.7, 'crates', .5);   // crouch behind it (the -z side)
 }
 function sandbagBag(K, x, y, z, ry, rnd, i) {
-  // a filled bag: flattened, slightly pillowed, tied end tucked under
-  K.blob('p_sandbag', x, y + .06, z, .29, .066, .17, { seg: 10, noise: .1, freq: 3.2, seed: i * 7 + 3, ry, flat: -.8, top: .75 });
+  // a filled bag: a squashed pillow (superellipsoid: flat top and bottom, full rounded sides), lumpy, pressed into the bags around it
+  K.blob('p_sandbag', x, y + .074, z, .3, .076, .176, { seg: 12, noise: .07, freq: 3.0, seed: i * 7 + 3, ry, sq: [.5, .32] });
 }
 function sandbags(K, o, v, rnd) {
   const L = o.len || 2.4, courses = Math.max(1, Math.min(12, o.h ? Math.round(o.h / .12) : 7)), rows = o.thick || 2, R = o.curve || 0, pitch = .6;
@@ -46,6 +47,7 @@ function sandbags(K, o, v, rnd) {
   const H = courses * .118 + .02;
   if (R) { const m = Math.max(1, Math.ceil(L2 / 1.2)); for (let k = 0; k < m; k++) { const a = (-L2 / 2 + (k + .5) * L2 / m) / R; K.col(Math.sin(a) * R, 0, R - Math.cos(a) * R, L2 / m + .1, H, rows * .34 + .1, { ry: a, surf: 'sand' }); } }
   else K.col(0, 0, 0, L2, H, rows * .34 + .1, { surf: 'sand' });
+  if (H > .6) K.hide(0, 0, R ? Math.min(R * .6, 1.4) : -(rows * .34 / 2 + .45), 'crates', .6);   // behind the wall (-z), inside a ring
 }
 function hesco(K, o, v, rnd) {
   const n = Math.max(1, Math.min(12, o.n || 3)), h2 = o.rows === 2 ? 2 : 1, c = 1.06, L = n * c, H = c * h2, fill = v === 'dirt' ? 'p_soil' : 'sand';
@@ -58,6 +60,7 @@ function hesco(K, o, v, rnd) {
     for (const s of [-1, 1]) for (const zs of [-1, 1]) K.cyl('p_galv', x + s * (c / 2 - .01), y, zs * (c / 2 - .01), .012, c - .01, { seg: 5 });
   }
   K.col(0, 0, 0, L, H, c, { surf: 'sand' });
+  K.hide(0, 0, -c / 2 - .45, 'crates', .6);
 }
 
 // ------------------------------------------------------------------------------------------------ fences and gates
@@ -103,11 +106,11 @@ function gate(K, o, v, rnd) {
     const L = o.len || 3.6, a = open * PI / 180;
     K.cyl('p_wood_sleeper', -L / 2 - .1, 0, 0, .1, 1.4, { seg: 8 }); K.cyl('p_wood_sleeper', L / 2 + .1, 0, 0, .1, 1.4, { seg: 8 });
     K.push(-L / 2, 0, 0, -a);
-    for (const y of [.25, .45, .65, .85, 1.1]) K.cylX('p_galv', 0, L, y, 0, .02, { seg: 6 });
-    K.cyl('p_galv', 0, .2, 0, .025, .95, { seg: 6 }); K.cyl('p_galv', L, .2, 0, .025, .95, { seg: 6 });
+    for (const y of [.25, .45, .65, .85, 1.1]) K.cylX('p_galv', 0, L, y, 0, y > 1 ? .026 : .02, { seg: 8 });
+    K.cyl('p_galv', 0, .2, 0, .03, .95, { seg: 8 }); K.cyl('p_galv', L, .2, 0, .03, .95, { seg: 8 });
     K.push(0, .25, 0, 0, 0, Math.atan2(.85, L)); K.cylX('p_galv', 0, Math.hypot(L, .85), 0, 0, .018, { seg: 6 }); K.pop();
     K.pop();
-    K.col(-L / 2 + Math.cos(a) * L / 2, 0, Math.sin(a) * L / 2, L, 1.15, .1, { ry: a, surf: 'metal' });
+    K.col(-L / 2 + Math.cos(a) * L / 2, 0, Math.sin(a) * L / 2, L, 1.15, .1, { ry: -a, surf: 'metal' });   // the leaf turns by -a (yaw convention)
     return;
   }
   // chain-link double gate in a frame (each leaf L / 2), hinged at the outer posts
@@ -223,8 +226,9 @@ const SIGNS = { stop: ['oct', 'sign_stop', .75], yield: ['tri', 'sign_yield', .9
 function roadSign(K, o, v, rnd) {
   const kind = SIGNS[v] ? v : 'stop', [shape, slot, sz] = SIGNS[kind];
   const H = o.h || 2.3;
-  K.cyl('p_galv', 0, 0, 0, .03, H + (shape === 'street' ? .5 : sz / 2), { seg: 8 });
-  if (shape === 'street') {
+  K.cyl('p_galv', 0, 0, 0, .03, H + (shape === 'street' ? .24 : sz / 2), { seg: 8 });
+  if (shape === 'street') {   // two name blades crossed on a cap bracket at the top of the post
+    K.cyl('p_galv', 0, H + .22, 0, .045, .03, { seg: 8 }); K.box('p_galv', 0, H + .43, 0, .05, .02, .05);
     for (const [ry, i] of [[0, 0], [PI / 2, 1]]) {
       K.push(0, H + .25 + i * .2, 0, ry);
       K.box('p_alu', 0, 0, 0, .92, .18, .015);
@@ -338,8 +342,9 @@ function mailbox(K, o, v, rnd) {
 function vending(K, o, v, rnd) {
   const W = .95, H = 1.83, D = .85, mat = v === 'snacks' ? 'p_paint_darkgrey' : 'paint_red', on = o.on !== false;
   K.box(mat, 0, 0, 0, W, H, D, { bev: .02 });
-  K.box('p_glass_tint', -.1, .55, D / 2 + .005, .62, 1.15, .02);
-  K.decal(v === 'snacks' ? 'vend_snacks' : 'vend_drinks', -.1, 1.125, D / 2 - .005, .6, 1.13, { glow: on });
+  // the lit product window: the artwork in front of the cabinet, a dark bezel round it (no tinted glass: it would dim the light)
+  K.decal(v === 'snacks' ? 'vend_snacks' : 'vend_drinks', -.1, 1.125, D / 2 + .004, .6, 1.13, { glow: on });
+  for (const [x, y, w, h] of [[-.1, .53, .66, .03], [-.1, 1.69, .66, .03], [-.415, .53, .03, 1.19], [.215, .53, .03, 1.19]]) K.box('p_plastic_dark', x, y, D / 2 + .008, w, h, .016);
   K.box('p_plastic_dark', .32, .55, D / 2 + .01, .22, 1.15, .02);
   K.box('p_chrome', .32, 1.25, D / 2 + .02, .12, .2, .01); K.box('p_screen', .32, 1.5, D / 2 + .02, .12, .06, .01);
   for (let i = 0; i < 9; i++) K.box('p_plastic_grey', .28 + (i % 3) * .04, 1.05 - Math.floor(i / 3) * .05, D / 2 + .02, .03, .03, .01);
@@ -370,7 +375,7 @@ function newsBox(K, o, v, rnd) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) K.box('steel_dark', sx * .2, 0, sz * .16, .03, .38, .03);
   K.box(mat, 0, .36, 0, .5, .62, .44, { bev: .02 });
   K.box(mat, 0, .98, -.02, .52, .06, .48, { bev: .015 });
-  K.box('glass', 0, .62, .222, .38, .3, .01); K.decal('news_box', 0, .77, .215, .36, .16);
+  K.box('glass', 0, .62, .222, .38, .3, .01); K.decal('news_box', 0, .77, .2235, .36, .16);   // the headline inside the window
   K.box('p_chrome', 0, .53, .225, .3, .03, .03); K.box('p_chrome', .17, .85, .222, .06, .08, .02);
   K.noCast('glass');
   K.col(0, 0, 0, .5, 1.04, .46, { surf: 'sheetmetal' });
@@ -401,8 +406,9 @@ function planter(K, o, v, rnd) {
   K.col(0, 0, 0, L, .55, W, { surf: 'concrete' });
 }
 function manhole(K, o, v, rnd) {
-  K.cyl('steel_dark', 0, 0, 0, .34, .012, { seg: 20 });
-  for (let i = 0; i < 5; i++) K.box('p_rail', 0, .012, -.24 + i * .12, .5 - Math.abs(i - 2) * .08, .004, .04);
+  // cast iron cover in its frame, flush with the road (a few mm proud): the pattern is the 'manhole' decal
+  K.cyl('steel_dark', 0, 0, 0, .36, .008, { seg: 24 });
+  K.decal('manhole', 0, .0095, 0, .66, .66, { face: 'u', ry: Math.floor(rnd() * 4) * PI / 2 });
 }
 
 export default [

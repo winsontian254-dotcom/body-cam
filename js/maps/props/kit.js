@@ -11,7 +11,7 @@
        K.cyl(mat, x, y, z, r, h, { r2, seg, caps, a0, a1, col })   vertical; cylX / cylZ (mat, x0, x1, y, z, r, o) horizontal
        K.ext(mat, pts [[x, y]...], z0, z1, { caps, smooth, col, uv })   polygon in local XY extruded along z (any winding)
        K.tube(mat, path [[x, y, z]...], r, { seg, caps, col, closed })  swept circle (pipes, rails, cables, handles)
-       K.blob(mat, x, y, z, rx, ry, rz, { seg, noise, freq, seed, flat, col, uv })   ellipsoid, seeded noise (rocks, bags)
+       K.blob(mat, x, y, z, rx, ry, rz, { seg, noise, freq, seed, flat, sq: [ev, ep], col, uv })   ellipsoid / superellipsoid (sq), seeded noise
        K.quad(mat, p0, p1, p2, p3, { uv: [u0, v0, u1, v1], n, col, two })   explicit quad (p0..p3 counter-clockwise from the front)
        K.decal(slot, x, y, z, w, h, { face: 'n'|'s'|'e'|'w'|'u', glow, ry })   atlas decal on a plane (see DECALS)
        K.col(x, y, z, w, h, d, { ry, surf, solid, ray, tag, walk })   box collider (y = bottom), K.ccyl(x, y, z, r, h, { surf })
@@ -38,11 +38,17 @@ export function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i
 // scale = metres per tile, color = target mean albedo, desat). Registered at import (only names not defined yet), so
 // B.mat('p_car_red') and merged geometry work like any library material (LF surface shader: wetness, sky occlusion).
 const PM = (surf, set, scale, o) => Object.assign({ surf, set, tex: set ? 'assets/textures/' + set : null, scale }, o);
-const PAINT = (hex, o = {}) => PM('metal', 'painted_metal', 2.0, Object.assign({ color: hex, desat: 1, macro: .05, por: .1, rough: .55 }, o));
+// flat paint (props): the even steel set under a satin, mostly dielectric coat. The painted_metal photo (glossy paint with bright
+// metallic scratches, albedo contrast 10x the steel set) read as white scribbles on drums, dumpsters and machines.
+const PAINT = (hex, o = {}) => PM('metal', 'steel', 1.2, Object.assign({ color: hex, desat: 1, macro: .12, por: .1, rough: 1.35, metal: .15 }, o));
 // car paint: the brushed-steel set (fine, even grain) tinted, mostly dielectric, under a clear coat (props.js) -- the painted_metal
 // photo carries chips and scratches that read as a wreck on a whole car body
 const CARPAINT = (hex, o = {}) => PM('metal', 'steel', 3.0, Object.assign({ color: hex, desat: 1, macro: .04, por: .08, rough: .5, metal: .35 }, o));
-const PLAST = (c, o = {}) => PM('rubber', null, 1, Object.assign({ col: c, rough: .5, macro: .05, por: .05, proc: 'noise' }, o));
+// moulded plastic: the fine stipple of the rubber set (near-flat normals, mips to an even colour) tinted to c (sRGB 0..1); rough is
+// the wanted roughness (the set's own is .59). The untextured procedural noise read as marble on bins and crates.
+const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+const PLAST = (c, o = {}) => { const r = o.rough != null ? o.rough : .5;
+  return PM(o.surf || 'rubber', 'rubber', .5, Object.assign({ color: hex(c), desat: 1, macro: .05, por: .05, metal: 0, col: c, proc: 'noise', bump: r < .3 ? .2 : .6 }, o, { rough: r / .59, surf: o.surf || 'rubber' })); };
 const FAB = (hex, o = {}) => PM('fabric', 'fabric', .5, Object.assign({ color: hex, desat: 1, macro: .1, por: 1 }, o));
 export const PROP_MATERIALS = {
   // car paints (glossy; props.js adds a clear coat)
@@ -50,11 +56,18 @@ export const PROP_MATERIALS = {
   p_car_black: CARPAINT('#111213', { rough: .3 }), p_car_red: CARPAINT('#7a1611', { rough: .35 }), p_car_blue: CARPAINT('#1a3157', { rough: .35 }),
   p_car_green: CARPAINT('#1e3a2b', { rough: .35 }), p_car_beige: CARPAINT('#a39377', { rough: .4 }), p_car_yellow: CARPAINT('#d29f12', { rough: .35 }),
   p_car_navy: CARPAINT('#141c2c', { rough: .35 }), p_car_orange: CARPAINT('#b04d18', { rough: .35 }), p_car_brown: CARPAINT('#47321f', { rough: .4 }),
+  // container walls in two more liveries (the container photo set, re-tinted)
+  p_cont_white: PM('sheetmetal', 'container', 1.94, { color: '#bdbcb4', desat: 1, macro: .12, por: .1 }),
+  p_cont_rust: PM('sheetmetal', 'container', 1.94, { color: '#5a3324', desat: .7, macro: .2, por: .2, rough: .85 }),
+  // satin coats standing in for the library paint_* / metal_painted materials on props (MAT_ALIAS below)
+  p_coat_yellow: PAINT('#c99a16', { rough: 1.25 }), p_coat_red: PAINT('#761c15', { rough: 1.25 }), p_coat_blue: PAINT('#1f3f78', { rough: 1.25 }),
+  p_coat_green: PAINT('#2f4a2c', { rough: 1.3 }), p_coat_white: PAINT('#c8c8c3', { rough: 1.3 }), p_coat_black: PAINT('#202122', { rough: 1.2 }),
+  p_coat_slate: PAINT('#4f5d63', { rough: 1.3 }),
   // flat paints
-  p_paint_olive: PAINT('#4a4f2e', { rough: .9 }), p_paint_tan: PAINT('#9a8762', { rough: .9 }), p_paint_milgreen: PAINT('#39432f', { rough: .9 }),
-  p_paint_orange: PAINT('#c0561a', { rough: .7 }), p_paint_grey: PAINT('#6b6e70', { rough: .7 }), p_paint_cream: PAINT('#cbc3ad', { rough: .7 }),
-  p_paint_lightblue: PAINT('#6d8fa6', { rough: .7 }), p_paint_darkgrey: PAINT('#34373a', { rough: .75 }), p_paint_beige: PAINT('#b9ad91', { rough: .8 }),
-  p_paint_teal: PAINT('#1f5a5c', { rough: .7 }), p_paint_maroon: PAINT('#55201c', { rough: .7 }), p_paint_purple: PAINT('#3c2a4a', { rough: .7 }),
+  p_paint_olive: PAINT('#4a4f2e', { rough: 1.5 }), p_paint_tan: PAINT('#9a8762', { rough: 1.5 }), p_paint_milgreen: PAINT('#39432f', { rough: 1.5 }),
+  p_paint_orange: PAINT('#c0561a', { rough: 1.35 }), p_paint_grey: PAINT('#6b6e70', { rough: 1.35 }), p_paint_cream: PAINT('#cbc3ad', { rough: 1.35 }),
+  p_paint_lightblue: PAINT('#6d8fa6', { rough: 1.35 }), p_paint_darkgrey: PAINT('#34373a', { rough: 1.35 }), p_paint_beige: PAINT('#b9ad91', { rough: 1.35 }),
+  p_paint_teal: PAINT('#1f5a5c', { rough: 1.35 }), p_paint_maroon: PAINT('#55201c', { rough: 1.35 }), p_paint_purple: PAINT('#3c2a4a', { rough: 1.35 }),
   // plastics (untextured, procedural noise; vertex colours tint them)
   p_plastic_red: PLAST([.5, .05, .04]), p_plastic_blue: PLAST([.05, .16, .42]), p_plastic_green: PLAST([.08, .28, .1]),
   p_plastic_yellow: PLAST([.8, .55, .04]), p_plastic_orange: PLAST([.85, .3, .04]), p_plastic_grey: PLAST([.32, .33, .34]),
@@ -107,10 +120,13 @@ export const PROP_MATERIALS = {
   p_rock_red: PM('concrete', 'rock', 2.2, { color: '#8a6a52', desat: .4, macro: .22, anti: 1, por: .5 }),
   p_soil: PM('dirt', 'dirt', 2.0, { color: '#3e3125', desat: .3, macro: .2, por: .8 }),
   // plants (untextured parts)
-  p_leaf_core: PLAST([.05, .1, .035], { surf: 'grass', rough: .9 }), p_stalk: PLAST([.36, .42, .14], { surf: 'grass', rough: .7 }), p_leaf_corn: PLAST([.28, .4, .1], { surf: 'grass', rough: .6 }),
+  p_leaf_core: PLAST([.05, .1, .035], { surf: 'grass', rough: .9 }), p_hedge_core: PLAST([.1, .17, .06], { surf: 'grass', rough: .95 }), p_stalk: PLAST([.36, .42, .14], { surf: 'grass', rough: .7 }), p_leaf_corn: PLAST([.28, .4, .1], { surf: 'grass', rough: .6 }),
   p_dead_wood: PM('wood', 'wood_dark', 2.0, { color: '#5b5048', desat: .7, macro: .14, por: .6 }),
 };
 for (const k in PROP_MATERIALS) if (!MATERIALS[k]) MATERIALS[k] = PROP_MATERIALS[k];
+/** library materials that props swap for their own version (Kit.g): the library paints use the painted_metal photo */
+export const MAT_ALIAS = { paint_yellow: 'p_coat_yellow', paint_red: 'p_coat_red', paint_blue: 'p_coat_blue', paint_green: 'p_coat_green',
+  paint_white: 'p_coat_white', paint_black: 'p_coat_black', metal_painted: 'p_coat_slate' };
 
 // custom materials: not in the library (atlas textures under assets/models/tex, or the decal atlas drawn at run time)
 const CUSTOM = { p_foliage: 1, p_bark: 1.2, p_decal: 1, p_glow: 1 };
@@ -249,7 +265,7 @@ export class Kit {
     this.geos = new Map(); this.cols = []; this.hides = []; this.stack = [ID()]; this.rand = rng(seed); this.lights = [];
     this.min = [Infinity, Infinity, Infinity]; this.max = [-Infinity, -Infinity, -Infinity];
   }
-  g(mat) { let g = this.geos.get(mat); if (!g) { g = new Geo(mat); this.geos.set(mat, g); } return g; }
+  g(mat) { mat = MAT_ALIAS[mat] || mat; let g = this.geos.get(mat); if (!g) { g = new Geo(mat); this.geos.set(mat, g); } return g; }
   noCast(mat) { this.g(mat).cast = false; return this; }
   get M() { return this.stack[this.stack.length - 1]; }
   push(x = 0, y = 0, z = 0, ry = 0, rx = 0, rz = 0, s = 1) {
@@ -582,6 +598,11 @@ export class Kit {
       for (let k = 0; k <= seg; k++) {
         const a = (k % seg) * TAU / seg;
         let px = Math.cos(a) * sr, py = sy, pz = Math.sin(a) * sr;
+        if (o.sq) {   // superellipsoid: sq = [vertical, plan] exponents (< 1 = squarer: pillows, bags, cushions)
+          const e1 = o.sq[0], e2 = o.sq[1], ca = Math.cos(a), sa = Math.sin(a), r1 = Math.pow(Math.abs(sr), e1);
+          py = Math.sign(sy) * Math.pow(Math.abs(sy), e1);
+          px = Math.sign(ca) * Math.pow(Math.abs(ca), e2) * r1; pz = Math.sign(sa) * Math.pow(Math.abs(sa), e2) * r1;
+        }
         let d = 1;
         if (amp) d += amp * (vnoise3(px * fq + seed * 1.7, py * fq + seed * .3, pz * fq - seed) - .5) * 2 + amp * .5 * (vnoise3(px * fq * 2.3 - seed, py * fq * 2.3, pz * fq * 2.3 + seed * .7) - .5);
         if (o.squash) py = py < 0 ? py * o.squash : py;

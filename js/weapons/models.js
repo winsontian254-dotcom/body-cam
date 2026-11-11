@@ -536,7 +536,11 @@ function addOpticFx(scene, res, meta, lod) {
   }
 }
 /** distance between the two canted sight units for a gun (mm): rail length behind the optic socket, clamped */
-function cantedSpan(gm) { const o = gm.sockets.optic, c = gm.sockets.canted; if (!o || !c) return 150; return Math.max(90, Math.min(260, Math.abs(o.position.z - c.position.z) * 1000 + 40)); }
+function cantedSpan(gm) {
+  const o = gm.sockets.optic, c = gm.sockets.canted; if (!o || !c) return 150;
+  if (gm.meta && gm.meta.cantedSpan) return gm.meta.cantedSpan;   // builder override: front unit clear of a long built-in scope's bell
+  return Math.max(90, Math.min(260, Math.abs(o.position.z - c.position.z) * 1000 + 40));
+}
 
 // ------------------------------------------------------------------------------------------------------------------
 // placeholder attachments (simple but correctly sized; part B replaces them with registerAttachmentBuilder)
@@ -1419,7 +1423,9 @@ BUILDERS.smgClassic = (K, S, gun, ctx) => {
   if (K.detail(0)) for (let k = 0; k < 4; k++) K.mat('bore').box(D(2.2), D(3), D(4), { p: P3(0, yB + 11.4, 326 + k * 7.5), b: 0, ao: .4 });
   K.mat('bore').cyl(D(5.4), D(1), { p: P3(0, yB, 357.3), segs: 14 }); K.use('body');
   const sLine = top + 13;
-  K.mat('metal').extrude(SH(K, [[-6, 0], [6, 0], [4, sLine - yB - 12, .4], [-3, sLine - yB - 12, .6]], .4), D(2.6), { p: P3(0, yB + 11.6, 344), b: D(.3), bs: 1 });
+  // front sight on a barrel collar behind the thread (stays with a suppressor or another muzzle device fitted)
+  K.mat('metal').lathe(mmP([[8, 291], [10.6, 291, 1], [10.6, 305, 1], [8, 305]]), { p: P3(0, yB, 0), segs: 24 });
+  K.mat('metal').extrude(SH(K, [[-6, 0], [6, 0], [4, sLine - yB - 10.6, .4], [-3, sLine - yB - 10.6, .6]], .4), D(2.6), { p: P3(0, yB + 10.2, 297), b: D(.3), bs: 1 });
   // rear peep sight with ears
   K.mat('rcv').extrude(SH(K, [[-10, 0], [10, 0], [9, 10, 1], [6, 16, 2], [3, 16], [3, 11], [-3, 11], [-3, 16], [-6, 16, 2], [-9, 10, 1]], .4), D(5), { plane: 'xy', off: D(zR + 12), p: P3(0, top - .4, 0), b: D(.5), bs: 1, holes: [csMM(circle(1.4, 12, 0, sLine - top + .4))] });
   // lower frame + guard + wood grip + selectors + mag well
@@ -1447,7 +1453,7 @@ BUILDERS.smgClassic = (K, S, gun, ctx) => {
   sockets(K, { muzzle: [[0, yB, 318]], under: [[0, yB - 15, 144]], side: [[16, yB, 250]], mag: [[0, 4, 33]], barrel: [[0, yB, 62]] });
   muzzleNode(K, yB, 358.2); ejectNode(K, [16, 38, 10]);
   handNodes(K, hr, { p: fg.p, ang: fg.ang, kind: 'grip' });
-  sightMeta(K, [0, sLine, 344], [0, sLine, zR + 14], 80);
+  sightMeta(K, [0, sLine, 298.3], [0, sLine, zR + 14], 80);
 };
 
 BUILDERS.pdwBullpup = (K, S, gun, ctx) => {
@@ -1604,7 +1610,7 @@ BUILDERS.smgIntegral = (K, S, gun, ctx) => {
   K.mat('rcv').lathe(mmP([[cr + .1, fz - 8], [cr + 2.4, fz - 7], [cr + 2.4, fz + 7], [cr + .1, fz + 8]]), { p: P3(0, yB, 0), segs: 36, a0: HALF - .9, a1: HALF + .9 });
   K.mat('rcv').extrude(SH(K, [[-8, 0], [8, 0], [8, ch * .5, 2], [5, ch + 2, 1.5], [3, ch + 2], [3, ch * .45, 1], [-3, ch * .45, 1], [-3, ch + 2], [-5, ch + 2, 1.5], [-8, ch * .5, 2]], .4), D(6), { plane: 'xy', off: D(fz - 3), p: P3(0, yB + cr + 1.4, 0), b: D(.5), bs: 1 });
   K.mat('metal').extrude(SH(K, [[-1.3, 0], [1.3, 0], [1, sY - (yB + cr + 1.4) - ch * .45, .3], [-1, sY - (yB + cr + 1.4) - ch * .45, .3]], .3), D(2.4), { plane: 'xy', off: D(fz - 1.2), p: P3(0, yB + cr + 1.4 + ch * .45, 0), b: D(.2), bs: 1 });
-  sockets(K, { optic: [[0, top + 9, -30]], under: [[0, yB - cr - 3.4, 130]], side: [[cr + 3.4, yB, 130]], mag: [[0, 6, 26]], stock: [[0, 40, zR]] });
+  sockets(K, { optic: [[0, top + 9, -22]], under: [[0, yB - cr - 3.4, 130]], side: [[cr + 3.4, yB, 130]], mag: [[0, 6, 26]], stock: [[0, 40, zR]] });
   muzzleNode(K, yB, zC1 + .2); ejectNode(K, [16, 42, -20]);
   handNodes(K, hr, { p: [0, yB - cr - 3, 130], kind: 'hold' });
   sightMeta(K, [0, sY, fz], [0, sY, -76], 75);
@@ -1642,7 +1648,7 @@ BUILDERS.smgMicro = (K, S, gun, ctx) => {
   K.mat('metal').extrude(SH(K, [[-30, -4], [30, -4], [30, 4], [-30, 4]].map(q => [q[0], q[1], 3]), .4), D(60), { plane: 'xy', off: D(zR - 222), p: P3(0, 30, 0), b: D(1), bs: 2 });
   K.mat('rubber').extrude(SH(K, [[-16, -26], [16, -26], [16, 36, 6], [-16, 36, 6]].map(q => [q[0], q[1], 5]), .5), D(10), { plane: 'xy', off: D(zR - 232), p: P3(0, 30, 0), b: D(2), bs: 2 });
   K.use('body');
-  sockets(K, { optic: [[0, top, -10]], muzzle: [[0, yB, zF + 10]], side: [[23, 30, 40]], mag: [[0, 12, -26], null, [.1, 0, 0]], stock: [[0, 30, zR]] });
+  sockets(K, { optic: [[0, top, -17]], muzzle: [[0, yB, zF + 10]], side: [[23, 30, 40]], mag: [[0, 12, -26], null, [.1, 0, 0]], stock: [[0, 30, zR]] });
   muzzleNode(K, yB, zF + 40.2); ejectNode(K, [23, 46, 0]);
   handNodes(K, hr, { p: [0, -14, zF - 40], kind: 'hold' });
   sightMeta(K, [0, sLine, zF - 8], [0, sLine, zR + 8], 80);
@@ -2217,8 +2223,9 @@ function mdev(K, kind, { z = 0, y = 0, mat = 'barrel', part = 'muzzleDev', s = 1
       K.mat(mat).loft3([A, Bq], { crease: 40 });
       bore(K, 18.5, 5.4);
     } else if (kind === 'booster') {                   // conical expansion chamber (short carbines)
-      L = 76;
-      K.mat(mat).lathe(LP([[3.8, 0], [10.6, 0, 1], [11.6, 1.5, 1], [11.6, 14, 1], [10.8, 15.5], [11.8, 17], [13.4, 24, 1], [13.4, 30, 1], [15.6, 50], [16.2, 66, 1], [15.4, 76, 1], [12.8, 76], [12.8, 72], [9, 60], [6.2, 42], [6.2, 20], [3.8, 18]]), { segs: 32, crease: 30 });
+      L = 73;
+      K.mat(mat).lathe(LP([[3.8, 0], [10.2, 0, 1], [11.2, 1.5, 1], [11.2, 18, 1], [10.4, 19.5], [11.4, 21], [12.4, 24, 1], [12.4, 32, 1], [14.8, 52], [15.2, 55, 1], [15.2, 70, 1], [14.4, 73, 1], [12.2, 73], [12.2, 68], [8.8, 54], [6.2, 40], [6.2, 22], [3.8, 20]]), { segs: 32, crease: 30 });
+      if (K.detail(0)) for (const zr of [58, 64]) K.mat(mat).lathe(LP([[15.1, zr], [15.7, zr + .6, 1], [15.7, zr + 2.4, 1], [15.1, zr + 3]]), { segs: 32 });   // grip rings on the bell
       if (K.detail(0)) K.mat('metal').box(D(3), D(4), D(9), { p: P3(0, -12.8, 8), b: D(.6) });
     } else if (kind === 'am') {                        // anti-materiel two-chamber brake, side windows (u = z, v = y)
       L = 118;
@@ -2511,6 +2518,7 @@ BUILDERS.ar = (K, S, gun, ctx) => {
   let sight;
   if (S.scope) {
     const sc = S.scope, ys = rT + Math.max(sc.obj / 2 + 9, sc.tube / 2 + 22);
+    if (S.cantedSpan) K.meta.cantedSpan = S.cantedSpan;
     K.part('scope', { pivot: P3(0, ys, -40), meta: { replace: 'optic' } });
     const g = scopeGeom(K, { z0: sc.z0, len: sc.len, y: ys, tube: sc.tube, obj: sc.obj, oc: sc.oc || 42, railY: rT, rings: sc.rings, mat: 'alu2', param: true, caps: true, lensPart: 'scopeLens' });
     K.use('body'); K.parts.get('scopeLens').parent = 'scope';
@@ -2552,7 +2560,7 @@ Object.assign(MODEL_SPECS, {
     hgLen: 380, muzzle: 'brake', mag: 'ar10', stock: 'prs', stockLen: 255, prof: 'heavy', trigger: 'flat', relief: 88 },
   richter: { b: 'ar', pal: 'black', wear: .45, large: true, mats: { rcv: 'cer_fde', alu: 'cer_fde', alu2: 'alu_blk', furn: 'poly_fde', grip: 'poly_fdeg', mag: 'poly_blk', barrel: 'nitride', metal: 'dksteel' },
     hgLen: 420, muzzle: 'brake', mag: 'sniper338', stock: 'prs', stockLen: 260, prof: 'fluted', trigger: 'flat', bipodStud: true,
-    scope: { z0: -150, len: 330, tube: 34, obj: 50, oc: 44, rings: [-62, 40], relief: 90 } },
+    scope: { z0: -150, len: 330, tube: 34, obj: 50, oc: 44, rings: [-62, 40], relief: 90 }, cantedSpan: 148 },
 });
 
 // ---- AK family (purga, taiga, kroha) ----------------------------------------------------------------------------------
@@ -2659,7 +2667,7 @@ Object.assign(MODEL_SPECS, {
     mats: { stamp: 'park', rcv: 'park', barrel: 'park', metal: 'park', wood: 'laminate_dk', grip: 'bakelite', mag: 'park', alu: 'alu_blk' } },
   taiga: { b: 'ak', pal: 'polymer', wear: .7, furn: 'poly', stock: 'side', muzzle: 'ak74', mag: 'ak545', hg: 'quad', coverRail: true, hood: 'open', gripGrooves: true,
     mats: { stamp: 'park', rcv: 'park', barrel: 'park', metal: 'dksteel', furn: 'poly_blk', grip: 'poly_grp', mag: 'poly_brn', alu: 'alu_blk' } },
-  kroha: { b: 'ak', pal: 'wood', wear: 1.5, furn: 'wood', stock: 'tri', muzzle: 'booster', mag: 'ak', hood: 'open', sLine: 62,
+  kroha: { b: 'ak', pal: 'wood', wear: .9, furn: 'wood', stock: 'tri', muzzle: 'booster', mag: 'ak', hood: 'open', sLine: 62,
     mats: { stamp: 'blued', rcv: 'blued', barrel: 'blued', metal: 'blued', wood: 'walnut', grip: 'bakelite', mag: 'blued', alu: 'alu_blk' } },
 });
 
@@ -2727,15 +2735,17 @@ BUILDERS.bolt = (K, S, gun, ctx) => {
   } else {
     // synthetic hunting / tactical stock: forend, bedding block, near-vertical grip, butt with comb + recoil pad, sling studs
     const W = 44, f1 = Math.min(zM - 120, z1 + 230);
-    K.mat('furn').extrude(SH(K, [[z1 - 20, yB - 12], [f1, yB - 12, 6], [f1 + 6, yB - 22, 10], [f1, -12, 12], [zm1 + 6, -10, 8], [zm1, -12], [zm0, -12], [-30, -10], [-44, -6, 4], [-40, 14], [z0 + 8, yB - 8], [z1 - 20, yB - 8]], 1.2), D(W), { b: D(7), bs: K.lod ? 1 : 3 });
+    // (lofted: the forend slims toward the tip and rounds underneath, the butt slims at the toe and toward the wrist)
+    K.mat('furn'); profLoft(K, [[z1 - 20, yB - 12], [f1, yB - 12, 6], [f1 + 6, yB - 22, 10], [f1, -12, 12], [zm1 + 6, -10, 8], [zm1, -12], [zm0, -12], [-30, -10], [-44, -6, 4], [-40, 14], [z0 + 8, yB - 8], [z1 - 20, yB - 8]],
+      { hw: (z, t) => W / 2 * (1 - .13 * sm((z - z1 - 40) / (f1 - z1 - 40))) * (1 - .12 * sm((.4 - t) / .4)), rt: 5, rb: 14, n: 30 });
     K.mat('bore').box(D(26), D(3), D(f1 - z1 - 10), { p: P3(0, yB - 11.5, (f1 + z1) / 2 + 4), b: 0, ao: .35 });
     hr = longGrip(K, { z: -52, y: 2, ang: .3, len: 92, w: 34, f: 18, b: 25, mat: 'furn', grooves: false, flare: 4, rows: 12, hump: 3 });
     const zb = z0 - (S.stockLen || 310);
-    K.mat('furn').extrude(SH(K, [[z0 + 10, yB - 8], [z0 - 30, yB - 2, 30], [zb + 40, yB + 10, 30], [zb, yB + 10, 8], [zb, -86, 10], [zb + 50, -82, 30], [-96, -36, 40], [-74, -10, 16], [-62, 8, 10], [z0 + 30, yB - 10]], 1.2), D(40), { b: D(9), bs: K.lod ? 1 : 3 });
+    const butt = K.mat('furn') && profLoft(K, [[z0 + 10, yB - 8], [z0 - 30, yB - 2, 30], [zb + 40, yB + 10, 30], [zb, yB + 10, 8], [zb, -86, 10], [zb + 50, -82, 30], [-96, -36, 40], [-74, -10, 16], [-62, 8, 10], [z0 + 30, yB - 10]],
+      { hw: (z, t) => (20 - 3.5 * sm((z - zb - 120) / (z0 - zb - 120))) * (1 - .15 * sm((.4 - t) / .4)), rt: 13, rb: 10, n: 28, pad: { len: 22, mat: 'rubber', inset: 1.2 } });
     K.mat('furn').extrude(SH(K, [[zb + 8, yB + 20, 10], [zb + 150, yB + 18, 20], [zb + 196, yB + 4, 12], [zb + 8, yB + 4, 4]], 1), D(32), { b: D(7), bs: K.lod ? 1 : 3 });   // raised comb
-    K.mat('rubber').extrude(SH(K, [[zb - 22, yB + 16, 6], [zb + 1, yB + 16], [zb + 1, -88], [zb - 20, -90, 8]], .8), D(44), { b: D(4), bs: K.lod ? 1 : 3 });
-    K.mat('dark').extrude(SH(K, [[zb + 1, yB + 15], [zb + 4, yB + 15], [zb + 4, -87], [zb + 1, -87]], .3), D(42), { b: D(.6), bs: 1 });
-    swivel(K, [0, -86, zb + 60]); swivel(K, [0, yB - 32, f1 - 40]); swivel(K, [0, yB - 32, f1 - 90]);
+    swivel(K, [0, butt.cut(zb + 60)[0] + .6, zb + 60]);
+    K.part('studF', { pivot: P3(0, -11.4, f1 - 28), meta: { replace: 'bipod' } }); swivel(K, [0, -11.4, f1 - 28]); K.use('body');   // a clamp-on bipod takes the stud
     hgBot = -11.6; hgSide = W / 2; hz = (z1 + f1) / 2;
   }
   // built-in scope on the rail (part 'scope' hides under an optic attachment)
@@ -2812,18 +2822,68 @@ Object.assign(MODEL_SPECS, {
 });
 
 // ---- bullpups (lodjur, kogarashi, jarv) ----------------------------------------------------------------------------------
+/** a z-monotone side profile ([z, y, fillet] mm) lofted along z with a rounded cross-section instead of a flat-sided extrusion:
+    o.hw(z, t) = half width (mm) at height fraction t (0 bottom .. 1 top of the section at z) or o.w (full width, number),
+    o.rt / o.rb = top / bottom corner radii (mm, number or fn(z)), o.n = stations at LOD 0 (plus the outline's own corners),
+    o.pad = { len, mat, inset } adds a butt pad lofted backwards from the first section, o.grain = uvSwap (wood).
+    Returns { cut(z) -> [yBot, yTop], half(z, y) } in mm so details can be laid on the surface. */
+function profLoft(K, prof, o = {}) {
+  const P = SH(K, prof, o.fall ?? 1.2).map(p => [p[0] * 1000, p[1] * 1000]);
+  let zMin = Infinity, zMax = -Infinity; for (const p of P) { zMin = Math.min(zMin, p[0]); zMax = Math.max(zMax, p[0]); }
+  const cut = z => { let lo = Infinity, hi = -Infinity; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; if (a[0] === b[0] || (a[0] - z) * (b[0] - z) > 0) continue; const y = a[1] + (b[1] - a[1]) * (z - a[0]) / (b[0] - a[0]); lo = Math.min(lo, y); hi = Math.max(hi, y); } return [lo, hi]; };
+  const hwF = o.hw || ((z, t) => (o.w || 40) / 2), num = (v, z) => (typeof v === 'function' ? v(z) : v);
+  const e = .3, gap = (zMax - zMin) / (K.lod === 0 ? 110 : K.lod === 1 ? 12 : 6), N = K.lod === 0 ? (o.n || 30) : K.lod === 1 ? 9 : 5;
+  let zs = []; for (let k = 0; k <= N; k++) zs.push(zMin + e + (zMax - zMin - 2 * e) * k / N);
+  if (K.lod === 0) for (const p of P) if (p[0] > zMin + e && p[0] < zMax - e) zs.push(p[0]);
+  zs.sort((a, b) => a - b);
+  { const kept = [zs[0]]; for (let k = 1; k < zs.length; k++) if (k === zs.length - 1 || zs[k] - kept[kept.length - 1] > gap) kept.push(zs[k]);   // >= gap apart
+    if (kept.length > 2 && kept[kept.length - 1] - kept[kept.length - 2] < gap * .5) kept.splice(kept.length - 2, 1); zs = kept; }
+  const segN = K.lod === 0 ? 3 : 1;
+  const section = (z, grow = 0) => {
+    const [lo0, hi0] = cut(z), lo = lo0 + grow, hi = hi0 - grow, L = Math.max(.6, hi - lo), hm = Math.max(.6, hwF(z, .5) - grow);
+    const rt = Math.max(.05, Math.min(num(o.rt ?? 8, z), hm - .02, L * .49)), rb = Math.max(.05, Math.min(num(o.rb ?? 8, z), hm - .02, L * .49));
+    return ovalPts(L, hm, rt, rb, segN).map(([s, x]) => { const t = s / L, h = Math.max(.3, hwF(z, t) - grow); return [D(x / hm * h), D(lo + s), D(z), 0]; });
+  };
+  const rows = zs.map(z => section(z));
+  K.loft3(rows, { crease: o.crease ?? 55, uvSwap: !!o.grain });
+  if (o.pad) {   // butt pad: the first section stepped back and eased at the end
+    const z0 = zs[0], pr = [], L2 = o.pad.len || 14, ins = o.pad.inset ?? 1.6, at = (dz, g) => section(z0, g).map(p => [p[0], p[1], D(z0 - dz), 0]);
+    pr.push(at(-1, ins * .2), at(L2 * .65, 0), at(L2 - 2, ins * .55), at(L2, ins * 1.6));
+    K.mat(o.pad.mat || 'rubber').loft3(pr, { crease: 55 });
+  }
+  return { cut, zs, half: (z, y) => { const [lo, hi] = cut(z); return hwF(z, Math.max(0, Math.min(1, (y - lo) / Math.max(.6, hi - lo)))); } };
+}
+
 BUILDERS.bullpup = (K, S, gun, ctx) => {
   const st = S.style || 'modern', yB = 52, bm = barrelMod(ctx), bl = (S.bl || gun.model.barrel * 1000) + bm.ext, zC = -118, zM = zC + bl;
   const zB = S.butt || -330, front = S.front || 40, W = S.w || 44, top = S.top || 74, cal = gun.bore === '762' ? '308' : '556';
-  // shell (side profile) + cheek piece, trigger guard / hand guard, grip
+  // shell (side profile lofted with a rounded section: the butt slims below the cheek line, the top edges are radiused)
   const shell = st === 'classic'
     ? [[zB, -54, 10], [zB, top - 10, 12], [zB + 40, top, 14], [-170, top, 6], [-160, yB + 4], [front + 20, yB + 4, 8], [front + 30, yB - 12, 10], [front, 0, 8], [-10, 0], [-40, -6], [-80, -6], [-150, -28, 16], [zB + 50, -60, 20]]
     : st === 'smooth'
       ? [[zB, -56, 12], [zB, top - 6, 14], [zB + 60, top + 2, 30], [front + 120, top, 30], [front + 160, yB + 10, 20], [front + 150, yB - 20, 14], [front + 40, yB - 26, 10], [front + 30, 0, 8], [-10, 0], [-40, -6], [-80, -6], [-150, -30, 20], [zB + 50, -62, 20]]
       : [[zB, -52, 6], [zB, top - 8, 8], [zB + 24, top, 6], [front + 60, top, 4], [front + 70, yB - 4, 4], [front + 60, yB - 22, 4], [front + 30, 0, 6], [-10, 0], [-40, -6], [-80, -6], [-150, -26, 10], [zB + 40, -58, 10]];
-  K.mat('frame').extrude(SH(K, shell, 1.2), D(W), { b: D(st === 'modern' ? 4 : 8), bs: K.lod ? 1 : 3 });
-  if (st !== 'smooth' && K.detail(1)) for (const sx of [-1, 1]) K.mat('frame').extrude(SH(K, [[zB + 30, 10, 6], [-170, 10, 6], [-170, top - 18, 6], [zB + 30, top - 18, 6]], .8), D(3), { off: sx > 0 ? D(W / 2 - 1) : -D(W / 2 + 2), b: D(1.2), bs: 2 });
-  K.mat('rubber').extrude(SH(K, [[zB - 16, -56, 6], [zB + 1, -56], [zB + 1, top - 8], [zB - 14, top - 10, 6]], .8), D(W + 2), { b: D(4), bs: K.lod ? 1 : 3 });
+  const slim = st === 'modern' ? .8 : .74, bulge = st === 'smooth' ? 1.04 : 1;
+  const hw = (z, t) => {   // butt: narrower toe, full at the cheek; receiver: slight belly; front: hand guard a touch narrower
+    const butt = sm((-150 - z) / 60), fr = sm((z - front) / 40);
+    const toe = 1 - (1 - slim) * butt * sm((.45 - t) / .45), belly = 1 + (bulge - 1) * Math.sin(Math.PI * t), cheekTop = 1 - .08 * butt * sm((t - .82) / .18);
+    return W / 2 * toe * belly * cheekTop * (1 - .08 * fr);
+  };
+  K.mat('frame'); const SHL = profLoft(K, shell, { hw, rt: st === 'modern' ? 7 : st === 'classic' ? 15 : 18, rb: st === 'modern' ? 6 : 12, n: 34, pad: { len: 16, mat: 'rubber' } });
+  // side panels (stippled grip texture / cheek weld) laid on the shell, a parting line along the receiver
+  if (K.detail(1)) for (const sx of [-1, 1]) {
+    const x = SHL.half(-240, 30) - .6, pz1 = st === 'smooth' ? -190 : -176;
+    K.mat('grip').extrude(SH(K, [[zB + 34, 12, 6], [pz1, 12, 6], [pz1, top - 20, 6], [zB + 34, top - 22, 8]], .8), D(2.2), { off: sx > 0 ? D(x) : -D(x + 2.2), b: D(.9), bs: 2 });
+    if (st === 'smooth' && K.detail(0)) for (let k = 0; k < 6; k++) {   // vent slots along the front shell
+      const zv = front + 34 + k * 17, xv = SHL.half(zv, yB - 14) - .45;
+      K.mat('bore').box(D(1), D(12), D(6), { p: P3(sx * xv, yB - 14, zv), b: 0, ao: .35 });
+    }
+  }
+  if (K.detail(0)) for (const sx of [-1, 1]) {   // moulded parting line / seam: a thin dark groove strip on each side
+    const zz0 = st === 'classic' ? -150 : zB + 30, zz1 = st === 'classic' ? front - 6 : front + 20, yy = st === 'classic' ? yB - 8 : 4;
+    let x = Infinity; for (let k = 0; k <= 8; k++) x = Math.min(x, SHL.half(zz0 + 4 + (zz1 - zz0 - 8) * k / 8, yy)); x -= .15;
+    K.mat('bore').box(D(.8), D(1.2), D(zz1 - zz0), { p: P3(sx * x, yy, (zz0 + zz1) / 2), b: 0, ao: .5 });
+  }
   if (st === 'classic') guardLoop(K, [[-56, 0], [front + 10, 0], [front + 14, -40, 10], [front, -104, 18], [-40, -112, 16], [-62, -96, 10]], [[-34, -8], [front, -8, 4], [front + 2, -40, 8], [front - 10, -96, 12], [-26, -100, 10], [-34, -88, 6]], 18, 3, 'frame');
   else guardLoop(K, [[-36, -4], [front - 4, -4], [front - 2, -18, 6], [front - 12, -34, 8], [-24, -36, 8], [-38, -20, 5]], [[-28, -7], [front - 12, -7, 2], [front - 12, -16, 4], [front - 18, -28, 5], [-20, -29, 5], [-29, -18, 4]], 14, 2.4, 'frame');
   triggerPart(K, [0, -2, 0], { face: 'curved', len: 18, w: 7, mat: 'metal' });
@@ -2831,10 +2891,13 @@ BUILDERS.bullpup = (K, S, gun, ctx) => {
   // magazine behind the grip (+ release paddle), cheek / ejection cover, charging handle
   rmag(K, { kind: S.mag || (cal === '308' ? 'g3' : st === 'classic' ? 'trans' : 'pmag'), top: [-150, 0], rake: -.04, variant: ctx.intr.mag });
   if (K.detail(0)) K.mat('frame').extrude(SH(K, [[-112, -2], [-106, -2], [-104, -16, 2], [-112, -14, 2]], .4), D(20), { b: D(.6), bs: 1 });
-  if (st !== 'smooth' && K.detail(1)) { K.mat('bore').box(D(1), D(18), D(64), { p: P3(W / 2 + .1, yB + 2, -150), b: 0, ao: .45 }); K.mat('frame').box(D(2), D(20), D(70), { p: P3(-W / 2 - .6, yB + 2, -150), b: D(.6) }); }
+  if (st !== 'smooth' && K.detail(1)) {   // ejection port (right) and the closed port cover (left), on the shell surface
+    const yP = Math.min(yB + 2, SHL.cut(-150)[1] - 12), xP = Math.min(SHL.half(-182, yP), SHL.half(-118, yP), SHL.half(-150, yP));
+    K.mat('bore').box(D(1), D(18), D(64), { p: P3(xP - .3, yP, -150), b: 0, ao: .45 }); K.mat('frame').box(D(2), D(20), D(70), { p: P3(-xP - .5, yP, -150), b: D(.6) });
+  }
   K.part('charging', { pivot: P3(st === 'classic' ? -W / 2 : 0, yB + 10, front - 20), meta: { slide: [0, 0, -D(110)] } });
-  if (st === 'classic') { K.mat('metal').box(D(8), D(10), D(16), { p: P3(-W / 2 - 4, yB + 8, -60), b: D(2) }); K.mat('metal').cyl(D(5), D(10), { p: P3(-W / 2 - 8, yB + 8, -60), axis: '-x', segs: 14 }); }
-  else if (st === 'modern') { K.mat('metal').extrude(SH(K, [[-6, 0], [6, 0], [5, 14, 3], [-5, 14, 3]], .4), D(8), { plane: 'xy', off: D(front + 30), p: P3(-W / 2 - 1, yB, 0), r: [0, 0, HALF], b: D(1), bs: 2 }); }
+  if (st === 'classic') { const xc = SHL.half(-60, yB + 8); K.mat('metal').box(D(8), D(10), D(16), { p: P3(-xc - 3.6, yB + 8, -60), b: D(2) }); K.mat('metal').cyl(D(5), D(10), { p: P3(-xc - 7.6, yB + 8, -60), axis: '-x', segs: 14 }); }
+  else if (st === 'modern') { K.mat('metal').extrude(SH(K, [[-6, 0], [6, 0], [5, 14, 3], [-5, 14, 3]], .4), D(8), { plane: 'xy', off: D(front + 30), p: P3(-SHL.half(front + 34, yB) - .6, yB, 0), r: [0, 0, HALF], b: D(1), bs: 2 }); }
   else { K.mat('metal').extrude(SH(K, [[-5, 0], [5, 0], [4, 12, 3], [-4, 12, 3]], .4), D(8), { plane: 'xy', off: D(front + 60), p: P3(0, top - 2, 0), b: D(1), bs: 2 }); }
   K.use('body');
   // barrel, gas, forend
@@ -2879,7 +2942,7 @@ BUILDERS.bullpup = (K, S, gun, ctx) => {
     K.mat('frame').extrude(SH(K, [[-120, yB - 4, 4], [front + 150, yB - 4, 6], [front + 150, yB + 12, 6], [-120, yB + 12, 4]], .6), D(10), { off: D(W / 2 - 3), b: D(2), bs: 2 });
     if (K.detail(0)) K.mat('bore').box(D(8), D(10), D(1), { p: P3(W / 2 + 2, yB + 4, front + 150.6), b: 0, ao: .3 });
   }
-  if (K.detail(0)) { qdSocket(K, [W / 2 + .2, 30, zB + 40], 1, 'metal'); qdSocket(K, [-W / 2 - .2, 30, zB + 40], -1, 'metal'); }
+  if (K.detail(0)) { const xq = SHL.half(zB + 40, 30) - .4; qdSocket(K, [xq, 30, zB + 40], 1, 'metal'); qdSocket(K, [-xq, 30, zB + 40], -1, 'metal'); }
   sockets(K, { optic: st === 'classic' ? null : [[0, top + 9, -40]], muzzle: [[0, yB, zM]], under: [[0, hgBot, st === 'classic' ? zFG + 60 : front + 130]], side: [[st === 'modern' ? 21 + 9 : st === 'classic' ? 28 : W / 2 + 2, yB, st === 'classic' ? front + 140 : front + 120]], mag: [[0, 0, -150], null, [-.04, 0, 0]], barrel: [[0, yB, front]] });
   muzzleNode(K, yB, zM + md + .2); ejectNode(K, st === 'smooth' ? [W / 2 + 2, yB + 4, front + 150] : [W / 2 + 1, yB + 2, -150], st === 'smooth' ? 'right' : 'right');
   handNodes(K, hr, st === 'classic' ? { p: [0, yB - 60, zFG], kind: 'grip' } : { p: [0, hgBot, front + 120], kind: 'hold' });
@@ -3025,7 +3088,7 @@ BUILDERS.pcc = (K, S, gun, ctx) => {
   guardLoop(K, [[-30, -2], [26, -2], [26, -14, 4], [18, -28, 6], [-20, -30, 6], [-32, -16, 5]], [[-22, -5], [18, -5, 2], [18, -13, 4], [12, -24, 5], [-14, -26, 5], [-23, -14, 4]], 12, 1.8, 'metal');
   triggerPart(K, [0, 2, 0], { face: 'curved', len: 18, w: 7 });
   rmag(K, { kind: 'pcc', top: [56, 2], variant: ctx.intr.mag });
-  swivel(K, [0, -100, zb + 70]); swivel(K, [0, yB - 30, zF + 110]);
+  { const zs = zb + 70, ybs = -48 - (zR - 80 - zs) * .2; swivel(K, [0, ybs + .8, zs]); } swivel(K, [0, yB - 26.4, zF + 126.5]);
   sockets(K, { optic: [[0, yB + 25, 14]], muzzle: [[0, yB, zM]], under: [[0, yB - 26, zF + 60]], side: [[17, yB - 14, zF + 70]], mag: [[0, 2, 56]], barrel: [[0, yB, zF]] });
   muzzleNode(K, yB, zM + .2); ejectNode(K, [17, yB + 3, 10]);
   handNodes(K, { p: [0, -40, -50], ang: .55 }, { p: [0, yB - 26, zF + 50], kind: 'hold' });
@@ -3081,9 +3144,14 @@ BUILDERS.brRoller = (K, S, gun, ctx) => {
   rmag(K, { kind: 'g3', top: [80, 6], rake: .02, variant: ctx.intr.mag });
   // fixed polymer stock with a rubber pad
   const zb = zR - (S.stockLen || 270);
-  K.mat('furn').extrude(SH(K, [[zR + 2, top - 4, 3], [zb + 30, top - 4, 10], [zb, top, 4], [zb, -86, 6], [zb + 40, -88, 10], [zR - 50, 6, 30], [zR + 2, 18, 4]], 1.2), D(42), { b: D(7), bs: K.lod ? 1 : 3 });
-  K.mat('rubber').extrude(SH(K, [[zb - 16, top + 2, 6], [zb + 1, top + 2], [zb + 1, -88], [zb - 14, -90, 6]], .6), D(44), { b: D(3.5), bs: 3 });
-  swivel(K, [0, -86, zb + 40]);
+  // (lofted: slim where it meets the receiver, full at the butt, the toe narrower than the comb)
+  const stk = K.mat('furn') && profLoft(K, [[zR + 2, top - 4, 3], [zb + 30, top - 4, 10], [zb, top, 4], [zb, -86, 6], [zb + 40, -88, 10], [zR - 50, 6, 30], [zR + 2, 18, 4]], {
+    hw: (z, t) => { const u = sm((zR - z) / (zR - zb)); return (15 + 6.5 * u) * (1 - .16 * u * sm((.35 - t) / .35)); }, rt: 11, rb: 8, n: 24, pad: { len: 16, mat: 'rubber' } });
+  if (K.detail(1)) for (const sx of [-1, 1]) {   // moulded recoil-buffer bosses / cheek ribs on the stock sides
+    const zz = zb + 70, xs = stk.half(zz, top - 22) - .5;
+    K.mat('furn').extrude(SH(K, [[zz - 40, top - 30, 6], [zz + 60, top - 30, 6], [zz + 60, top - 14, 6], [zz - 40, top - 14, 6]], .6), D(1.6), { off: sx > 0 ? D(xs) : -D(xs + 1.6), b: D(.7), bs: 2 });
+  }
+  swivel(K, [0, stk.cut(zb + 40)[0] + .6, zb + 40]);
   sockets(K, { optic: [[0, top + 27, -6]], muzzle: [[0, yB, zM]], under: [[0, yB - 20, (hz0 + hz1) / 2]], side: [[20, yB + 4, (hz0 + hz1) / 2 + 20]], mag: [[0, 6, 80], null, [.02, 0, 0]], stock: [[0, 40, zR]] });
   muzzleNode(K, yB, zM + md + .2); ejectNode(K, [w / 2 + 1, yB + 6, 20]);
   handNodes(K, hr, { p: [0, yB - 20, (hz0 + hz1) / 2 - 10], kind: 'hold' });
@@ -3134,7 +3202,7 @@ BUILDERS.brClassic = (K, S, gun, ctx) => {
   K.mat('alu').extrude(SH(K, [[-w / 2 - 8, yB + 20], [-w / 2, yB + 20], [-4, yB + 28], [12, yB + 28], [12, yB + 34], [-w / 2 - 8, yB + 34, 3]], .6), D(120), { plane: 'xy', off: D(-110), b: D(1), bs: 2 });
   K.rail(D(116), { p: P3(0, yB + 34, -108) });
   K.use('body');
-  swivel(K, [0, -110, zb + 60]); swivel(K, [0, yB - 30, zM - 140]);
+  { const zs = zb + 60, ybs = -56 - (zR - 60 - zs) * .18; swivel(K, [0, ybs + .8, zs]); } swivel(K, [0, yB - 27.4, zG + 10]);
   sockets(K, { optic: [[0, yB + 43, -50]], muzzle: [[0, yB, zM]], under: [[0, yB - 26, zF + 180]], side: [[18, yB - 12, zF + 150]], mag: [[0, yB - 30, 62]] });
   muzzleNode(K, yB, zM + md + .2); ejectNode(K, [w / 2 + 1, yB + 8, 0]);
   handNodes(K, { p: [0, -30, -50], ang: .5 }, { p: [0, yB - 30, zF + 120], kind: 'hold' });
@@ -3283,7 +3351,7 @@ registerAttachmentBuilder('kind:prism', (K, att, c) => {
 });
 function scopeAttachment(K, att, c, extra = {}) {
   const L = (c.spec.length || .3) * 1000, tube = (c.spec.tube || .03) * 1000, obj = (c.spec.lens || .042) * 1000, z0 = -L / 2;
-  const oc = Math.min(44, Math.max(tube + 8, obj * .82)), y = Math.max(obj / 2 + 2.6 + 6, tube / 2 + 14);
+  const oc = Math.min(44, Math.max(tube + 8, obj * .82)), y = Math.max(obj / 2 + 2.6 + 6, tube / 2 + 14, oc / 2 + 13.5);   // ocular clears a folded rear BUIS
   const zc = z0 + L * .52, sad = L < 160 ? 14 : 20, orr = Math.max(tube / 2 + 1, obj / 2 + 2.6), bellL = Math.max(4, (orr - tube / 2) * 2.4), zb = z0 + L - 24 - bellL;
   let r1 = Math.max(z0 + 74, -80), r2 = Math.min(zb - 10, 80);
   if (Math.abs(r1 - zc) < sad + 9) r1 = zc - sad - 9; if (Math.abs(r2 - zc) < sad + 9) r2 = zc + sad + 9;

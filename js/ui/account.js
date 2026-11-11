@@ -108,7 +108,7 @@ export function accountScreen(tab0) {
   const clearTimers = () => { timers.forEach(t => clearInterval(t)); timers = []; };
   const head = () => {
     const u = Account.member() ? Account.user() : null, st = Profile.syncState();
-    const sync = !u ? 'GUEST · SAVED ON THIS DEVICE' : st.state === 'syncing' ? 'SYNCING…' : st.state === 'error' ? 'CLOUD OFFLINE' : st.state === 'ok' ? 'CLOUD SYNCED' : 'CLOUD';
+    const sync = !u ? 'GUEST · LOCAL SAVE' : st.state === 'syncing' ? 'SYNCING…' : st.state === 'error' ? 'CLOUD OFFLINE' : st.state === 'ok' ? 'CLOUD SYNCED' : 'CLOUD';
     headR.innerHTML = (u ? '<i class="ac-dot" style="--c:' + col(u.color) + '"></i><b>' + esc(u.username) + '</b> · ' : '') + esc(sync);
     headR.title = u ? (st.state === 'error' ? 'Not saved to the cloud: ' + st.error + ' (retrying)' : st.at ? 'Last cloud sync: ' + new Date(st.at).toLocaleString() : '') : 'Sign in to keep your progress in the cloud';
   };
@@ -275,7 +275,7 @@ export function accountScreen(tab0) {
       for (const f of j.friends) {
         const where = !f.online ? 'OFFLINE · LAST SEEN ' + ago(f.last_seen) : f.liveFire ? esc(f.activity) : 'NEON VEINS · ' + esc(f.activity || 'ONLINE');
         const r = h('div', 'ac-row' + (f.online ? ' on' : '') + (f.liveFire ? ' lf' : ''), '<i class="ac-dot' + (f.online ? '' : ' off') + '" style="--c:' + col(f.color) + '"></i>'
-          + '<div class="ac-row-t"><b>' + esc(f.username) + '</b><small>' + where + (f.joinable ? ' · <em>CODE ' + esc(f.join_code) + '</em>' : '') + '</small></div>');
+          + '<div class="ac-row-t"><b>' + esc(f.username) + '</b><small class="ac-act"><span>' + where + '</span>' + (f.joinable ? '<em> · CODE ' + esc(f.join_code) + '</em>' : '') + '</small></div>');
         const btns = h('div', 'ac-row-b');
         if (f.joinable) btns.appendChild(UI.button('JOIN', () => joinCode(f.join_code, f.username), 'primary sm'));
         if (hostCode() && f.online) btns.appendChild(UI.button('INVITE', async () => { try { await Account.invite(f.id, hostCode()); UI.toast('INVITE SENT TO ' + f.username.toUpperCase(), { kind: 'ok' }); } catch (e) { UI.toast(e.message.toUpperCase(), { kind: 'warn' }); } }, 'sm'));

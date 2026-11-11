@@ -6,6 +6,7 @@
    Exports:
      Hud   class (game system 'hud'): new Hud(game); game.addSystem(hud). late(dt) updates the DOM (writes only what changed).
            hud.el, hud.message(text, sub, secs), hud.showScoreboard(bool), dispose()
+           hud.modeHud (js/ui/modehud.js: objectives, markers, money, notices), hud.buy (js/ui/buy.js), hud.sb (js/ui/scoreboard.js)
    Settings read: crosshair { style color size gap thick dot outline alpha dynamic }, hudScale, bodycamHud, showFps. */
 import { Settings } from '../core/settings.js';
 import { Input } from '../core/input.js';
@@ -16,6 +17,9 @@ import { getNade } from '../grenades/data.js';
 import { currentWeapon, statsOf, currentCone, nearestDrop, reloadProgress, scopedView } from '../game/weapon.js';
 import { TEAM_NAMES, TEAM_COLORS, isEnemy } from '../game/player.js';
 import { getMapMeta } from '../maps/index.js';
+import { ModeHud } from './modehud.js';
+import { BuyMenu } from './buy.js';
+import { Scoreboard } from './scoreboard.js';
 
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -88,6 +92,10 @@ export class Hud {
       bus.on('match:end', e => this.matchEnd(e)),
       Input.on((type, a) => { if (a === 'scoreboard') this.showScoreboard(type === 'down'); }),
     ];
+    // mode / objective layer, buy menu, scoreboard (modes worker); each is optional: a failure keeps the core HUD running
+    try { this.modeHud = new ModeHud(game, this); } catch (e) { console.error('[hud] mode hud failed', e); }
+    try { this.buy = new BuyMenu(game, this); } catch (e) { console.error('[hud] buy menu failed', e); }
+    try { this.sb = new Scoreboard(game, this); } catch (e) { console.error('[hud] scoreboard failed', e); }
   }
 
   applySettings() {
@@ -109,16 +117,16 @@ export class Hud {
   message(a, b = '', secs = 2.5) { this.$.msgA.textContent = a; this.$.msgB.textContent = b; this.msgT = secs; this.$.msg.classList.add('on'); }
   roundEnd(e) {
     const me = this.g.local, w = e.winner;
-    const name = w > 0 ? TEAM_NAMES[w] : 'DRAW';
+    const name = w > 0 ? this.g.match.teamName(w) : 'DRAW';
     const why = { elimination: 'ELIMINATED', time: 'TIME EXPIRED', objective: 'OBJECTIVE', bomb: 'TARGET DESTROYED', defuse: 'CHARGE DEFUSED' }[e.reason] || '';
-    this.message(w > 0 ? name + ' WINS THE ROUND' : 'ROUND DRAW', why, 4);
+    this.message(e.title || (w > 0 ? name + ' WINS THE ROUND' : 'ROUND DRAW'), e.sub != null ? e.sub : why, 4);
     this.$.msg.dataset.tone = me && w === me.team ? 'win' : w > 0 ? 'lose' : '';
   }
   matchEnd(e) {
     const me = this.g.local, w = e.winner;
     let a = 'MATCH OVER', tone = '';
     if (this.g.mode.teams === 0) { const p = this.g.players.get(w); a = p ? (p === me ? 'YOU WIN' : p.name.toUpperCase() + ' WINS') : 'DRAW'; tone = p === me ? 'win' : 'lose'; }
-    else if (w > 0) { a = TEAM_NAMES[w] + ' WINS'; tone = me && me.team === w ? 'win' : 'lose'; }
+    else if (w > 0) { a = this.g.match.teamName(w) + (this.g.mode.teamNames && this.g.mode.teamNames.plural ? ' WIN' : ' WINS'); tone = me && me.team === w ? 'win' : 'lose'; }
     else a = 'DRAW';
     const sc = this.g.mode.teams === 0 ? '' : e.score[1] + ' — ' + e.score[2];
     this.message(a, sc, 30); this.$.msg.dataset.tone = tone;
@@ -149,7 +157,7 @@ export class Hud {
     }
   }
 
-  showScoreboard(on) { this.board = !!on; this.$.board.classList.toggle('on', this.board); if (on) this.renderBoard(); }
+  showScoreboard(on) { if (this.sb) { this.sb.show(on); return; } this.board = !!on; this.$.board.classList.toggle('on', this.board); if (on) this.renderBoard(); }
   renderBoard() {
     const g = this.g, rows = g.mode.score ? g.mode.score(g) : [...g.players.values()].map(p => ({ id: p.id, name: p.name, team: p.team, score: p.score, kills: p.kills, deaths: p.deaths, assists: p.assists }));
     const teams = g.mode.teams === 0 ? [0] : [1, 2];
@@ -195,18 +203,18 @@ export class Hud {
       this.set('n2', $.n2, this.ffaLeadName || 'LEAD'); this.set('s2', $.s2, String(this.ffaLead || 0));
     } else {
       const my = p.team === 2 ? 2 : 1, ot = 3 - my;
-      this.set('n1', $.n1, TEAM_NAMES[my]); this.set('s1', $.s1, String(m.score[my]));
-      this.set('n2', $.n2, TEAM_NAMES[ot]); this.set('s2', $.s2, String(m.score[ot]));
+      this.set('n1', $.n1, m.teamName(my)); this.set('s1', $.s1, String(m.score[my]));
+      this.set('n2', $.n2, m.teamName(ot)); this.set('s2', $.s2, String(m.score[ot]));
       this.set('c1', $.t1.style, TEAM_COLORS[my], 'color'); this.set('c2', $.t2.style, TEAM_COLORS[ot], 'color');
     }
     let tleft = m.phase === 'live' ? (m.rounds ? m.t : m.timeLeft) : m.t;
-    const timeStr = Number.isFinite(tleft) ? fmtTime(tleft) : '--:--';
+    const timeStr = this.mh && this.mh.clock != null && m.phase === 'live' ? this.mh.clock : Number.isFinite(tleft) ? fmtTime(tleft) : '--:--';
     this.set('time', $.time, timeStr);
-    const ph = { warmup: 'WARMUP', freeze: 'STAND BY', live: m.rounds ? 'ROUND ' + m.round : '', roundEnd: 'ROUND OVER', halftime: 'HALF TIME', over: 'MATCH OVER' }[m.phase] || '';
+    const ph = { warmup: 'WARMUP', freeze: m.econ && m.econ.on ? 'BUY TIME' : 'STAND BY', live: m.rounds ? 'ROUND ' + m.round + (m.ot ? ' · OT' : '') : '', roundEnd: 'ROUND OVER', halftime: m.inter === 'ot' ? 'OVERTIME' : 'HALF TIME', over: 'MATCH OVER' }[m.phase] || '';
     this.set('phase', $.phase, ph);
     const mh = this.mh;
     this.set('sub', $.sub, mh && mh.top ? mh.top : '');
-    this.cls('low', $.time, 'low', m.phase === 'live' && Number.isFinite(tleft) && tleft < 10);
+    this.cls('low', $.time, 'low', m.phase === 'live' && (Number.isFinite(tleft) && tleft < 10 || !!(this.mh && this.mh.clockAlert)));
     // freeze countdown
     if (m.phase === 'freeze' || m.phase === 'warmup') {
       this.set('msgA', $.msgA, m.phase === 'warmup' ? 'WARMUP' : (m.round <= 1 ? 'MATCH STARTS IN' : 'ROUND ' + m.round + ' STARTS IN'));
@@ -298,11 +306,18 @@ export class Hud {
         b = (gun ? gun.name.toUpperCase() : String(kb.weapon || '').toUpperCase()) + (kb.headshot ? '  ·  HEADSHOT' : '') + (kb.wallbang ? '  ·  THROUGH COVER' : '')
           + '  ·  ' + Math.round(Math.hypot(kb.killer.pos.x - p.pos.x, kb.killer.pos.z - p.pos.z)) + ' M  ·  ' + Math.max(0, Math.ceil(kb.killer.hp)) + ' HP LEFT';
       } else if (kb && kb.kind === 'fall') a = 'FATAL FALL';
-      if (p.respawnT > 0) c = 'RESPAWN IN ' + p.respawnT.toFixed(1);
+      if (p.respawnWait) c = p.respawnWait;
+      else if (p.respawnT > 0) c = 'RESPAWN IN ' + p.respawnT.toFixed(1);
+      else if (m.rounds && !g.mode.respawn) c = g.spectate ? '' : 'NEXT ROUND';
       else if (g.spectate) { const s = g.players.get(g.spectate); c = s ? 'SPECTATING ' + s.name.toUpperCase() : ''; }
       this.set('deadA', $.deadA, a); this.set('deadB', $.deadB, b); this.set('deadC', $.deadC, c);
     }
+    for (const sub of [this.modeHud, this.buy, this.sb]) { if (sub) { try { sub.late(dt); } catch (e) { if (!sub._err) { sub._err = true; console.error('[hud] sub-hud failed', e); } } } }
   }
 
-  dispose() { for (const f of this.offs) f(); this.offs.length = 0; this.el.remove(); }
+  dispose() {
+    for (const f of this.offs) f(); this.offs.length = 0;
+    for (const s of [this.buy, this.sb, this.modeHud]) { try { if (s) s.dispose(); } catch (e) { console.error(e); } }
+    this.el.remove();
+  }
 }

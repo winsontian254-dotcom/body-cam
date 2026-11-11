@@ -85,6 +85,9 @@
 .ac-row-t small { font: 10.5px var(--lf-mono); letter-spacing: .1em; color: #6f6d68; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
 .ac-row.on .ac-row-t small { color: #9d9a93; } .ac-row.lf .ac-row-t small { color: #d9c690; }
 .ac-row-t em { font-style: normal; color: var(--mn-acc); }
+.ac-row-t small.ac-act { display: flex; min-width: 0; }   /* a long activity is cut, the join code stays readable */
+.ac-row-t small.ac-act > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-row-t small.ac-act > em { flex: none; white-space: pre; }
 .ac-row.dim { opacity: .6; }
 .ac-row-b { display: flex; gap: 6px; flex: none; }
 .ac-x { color: #77746e; font-size: 16px; padding: 4px 8px; } .ac-x:hover { color: var(--mn-red) !important; }
