@@ -64,6 +64,19 @@ function shedRails(B, x0, x1, z, y = 0) {
     B.box((x0 + x1) / 2, y + 0.15, z + s * 0.7535, x1 - x0, 0.02, 0.06, { mat: 'p_chrome', collide: false, cast: false });
   }
 }
+/** lower-wall paint / timber band (1.2 m) with a rail, on the face of a wall along x at z; face = the side it looks to ('n' | 's') */
+function wainscot(B, x0, x1, z, y, mat, face) {
+  const d = face === 'n' ? 1 : -1;
+  B.box((x0 + x1) / 2, y, z + d * 0.01, x1 - x0, 1.2, 0.02, { mat, collide: false, cast: false });
+  B.box((x0 + x1) / 2, y + 1.2, z + d * 0.02, x1 - x0, 0.06, 0.04, { mat: 'wood_dark', collide: false, cast: false });
+  B.box((x0 + x1) / 2, y, z + d * 0.02, x1 - x0, 0.12, 0.03, { mat: 'paint_black', collide: false, cast: false });
+}
+function wainscotZ(B, z0, z1, x, y, mat, face) {
+  const d = face === 'e' ? 1 : -1;
+  B.box(x + d * 0.01, y, (z0 + z1) / 2, 0.02, 1.2, z1 - z0, { mat, collide: false, cast: false });
+  B.box(x + d * 0.02, y + 1.2, (z0 + z1) / 2, 0.04, 0.06, z1 - z0, { mat: 'wood_dark', collide: false, cast: false });
+  B.box(x + d * 0.02, y, (z0 + z1) / 2, 0.03, 0.12, z1 - z0, { mat: 'paint_black', collide: false, cast: false });
+}
 const lamp = (B, x, y, z, o = {}) => B.light(Object.assign({ x, y, z, intensity: 14, color: [1, 0.86, 0.66], fixture: 'tube' }, o));
 
 export default {
@@ -182,7 +195,7 @@ export default {
       sign(B, 'office', -16.5, FL + h1 - 0.15, -67.82, 3.6, 0.9, { lit: true });
       // upper storey lit windows seen from outside (blinds)
       for (const c of [-20, -13, -5]) sign(B, 'winlit', c, FL + h1 + 1.8, -67.95, 2.1, 1.3, { glow: true });
-      lamp(B, -21, FL + h1, -74.5, { intensity: 12 }); lamp(B, -13, FL + h1, -74.5, { intensity: 12 });
+      lamp(B, -21, FL + h1, -74.5, { intensity: 18 }); lamp(B, -13, FL + h1, -74.5, { intensity: 18 });
       // lobby furniture (crew room): lockers, benches, a table, notice board, vending machine
       B.prop('lockers', -25.4, FL, -76, { ry: HP, n: 6, variant: 'grey', bench: true });
       B.prop('lockers', -25.4, FL, -71.5, { ry: HP, n: 4, variant: 'blue' });
@@ -192,6 +205,17 @@ export default {
       B.prop('wall_clock', -12, FL + 2.5, -81.82, {});
       B.prop('fire_extinguisher', -8.3, FL, -70, { ry: -HP });
       B.prop('poster', -22.5, FL + 1.3, -81.82, { i: 2 });
+      // painted dado (green gloss to 1.2 m, a dark rail on top) round the crew room, clear of the gates
+      for (const [a, b] of [[-25.85, -21.45], [-18.55, -14.45], [-11.55, -8.1]]) wainscot(B, a, b, -68.17, FL, 'paint_green', 's');
+      wainscot(B, -25.85, -8.1, -81.83, FL, 'paint_green', 'n');
+      wainscotZ(B, -81.85, -68.15, -25.83, FL, 'paint_green', 'e'); wainscotZ(B, -81.85, -68.15, -8.12, FL, 'paint_green', 'w');
+      B.prop('tv', -8.15, FL + 1.55, -73.5, { wall: true, ry: -HP, on: true });
+      B.prop('armchair', -10.2, FL, -72.0, { variant: 'tan', ry: HP + 0.3 }); B.prop('armchair', -10.2, FL, -75.0, { variant: 'tan', ry: HP - 0.3 });
+      B.prop('coffee_table', -11.4, FL, -73.5, { variant: 'wood', ry: HP });
+      B.prop('poster', -18.0, FL + 1.25, -81.84, { variant: 'flyer', i: 1 }); B.prop('poster', -11.5, FL + 1.25, -81.84, { i: 5 });
+      B.prop('wall_clock', -25.84, FL + 2.5, -79.0, { ry: HP });
+      B.prop('light_fixture', -17, FL + h1, -74.5, { variant: 'troffer' });
+      lamp(B, -17, FL + h1 - 0.05, -79.5, { intensity: 10, fixture: 'panel' });
       // dispatcher office (east, reachable from outside): desks, consoles, filing cabinets, a closet
       B.prop('control_console', -3.8, FL, -80.8, { len: 3.2 });
       B.prop('desk', -4.5, FL, -72.0, { variant: 'metal', ry: PI });
@@ -224,7 +248,16 @@ export default {
       for (let i = 0; i < 4; i++) B.box(x0 + 1 + i * 11, FL + h + 0.3, 72, 0.1, 0.25, 16, { mat: 'steel_dark', collide: false });
       B.prop('ac_unit', 4, FL + h + 0.3, 75, { variant: 'hvac' }); B.prop('vent', 18, FL + h + 0.3, 70, { variant: 'box' });
       sign(B, 'bunk', -0.3, FL + h - 0.15, 63.82, 3.6, 0.9, { face: 's', lit: true });
-      lamp(B, -5, FL + h, 72, { intensity: 11 }); lamp(B, 3, FL + h, 72, { intensity: 11 });
+      lamp(B, -5, FL + h, 72, { intensity: 17 }); lamp(B, 3, FL + h, 72, { intensity: 17 });
+      // wainscot (dark timber to 1.2 m) and a rag rug; a bookshelf and a notice board by the doors
+      for (const [a, b] of [[-9.85, -5.45], [-2.55, 2.05], [4.95, 7.9]]) wainscot(B, a, b, 64.17, FL, 'wood_dark', 'n');
+      wainscot(B, -9.85, 7.9, 79.83, FL, 'wood_dark', 's');
+      wainscotZ(B, 64.15, 79.85, -9.83, FL, 'wood_dark', 'e'); wainscotZ(B, 64.15, 79.85, 7.88, FL, 'wood_dark', 'w');
+      B.prop('rug', -6.5, FL + 0.01, 76.2, { variant: 'red', w: 2.2, d: 3.0, ry: HP });
+      B.prop('bookshelf', -9.6, FL, 69.5, { variant: 'walnut', ry: HP, w: 1.2 });
+      B.prop('whiteboard', 0.2, FL + 1.0, 64.18, { w: 2.0 });
+      B.prop('armchair', -2.0, FL, 77.8, { variant: 'green', ry: PI - 0.4 });
+      B.prop('light_fixture', -1, FL + h, 76.5, { variant: 'pendant' });
       // common room: sofas, a TV, kitchenette, table, lockers
       B.prop('sofa', -6.5, FL, 77.6, { variant: 'brown', ry: PI }); B.prop('sofa', -8.9, FL, 74.5, { variant: 'charcoal', ry: HP, seats: 2 });
       B.prop('coffee_table', -6.5, FL, 76.0, { variant: 'wood' }); B.prop('tv', -6.5, FL, 79.4, { ry: PI, on: true });

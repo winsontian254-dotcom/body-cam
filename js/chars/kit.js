@@ -256,7 +256,7 @@ else if(r<14.5){col=lfCamo(0.,lp*1.07+.21,n)*grain*.94;lfRough=.93;}
 else if(r<15.5){col=vec3(.045,.032,.024);lfRough=.8;}
 else {col=vec3(.03,.031,.033);lfRough=.55;}
 surfaceAlbedo*=col;
-if(vLfInst.z>.5){vec3 v=normalize(vEyePosition.xyz-vPositionW);float f=1.-max(dot(normalW,v),0.);lfRim=lfLin(lfPal(13.).rgb)*f*f*f*.55*vLfInst.z;}
+if(vLfInst.z>.5){vec3 v=normalize(vEyePosition.xyz-vPositionW);float f=1.-max(dot(normalW,v),0.);lfRim=lfLin(lfPal(13.).rgb)*f*f*f*.32*vLfInst.z;}
 }
 #endif
 `;

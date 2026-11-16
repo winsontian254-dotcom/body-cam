@@ -21,7 +21,7 @@
    hidden from the camera the same way. game.thirdPerson = true draws the local player normally. */
 import { loadKit, Batch, charMaterial, setPaletteRow, PAL_ROWS, orient } from './kit.js';
 import { newAnim, newPose, animate, kick, flinch, land, jumped, frameMul, newFrame } from './anim.js';
-import { lookFor, paletteOf } from './looks.js';
+import { lookFor, paletteOf, TEAM_KIT, SKIN, ACCENT } from './looks.js';
 import { buildGearSet, KIT_PARTS } from './gear.js';
 import { Ragdoll } from './ragdoll.js';
 import { HitboxOverlay } from './debug.js';
@@ -96,6 +96,7 @@ export class Characters {
     this.ok = false; this.fallback = null;
     this.ms = 0; this.lastStats = null;
     this.thirdPersonOverride = null;
+    this.timeScale = 1;                    // tests: 0 freezes the animation (the renderer keeps drawing)
     this.offs = [];
     this.ready = loadKit(scene).then(KD => { if (this.disposed) return; this.KD = KD; this.build(); this.ok = true; })
       .catch(e => {
@@ -166,7 +167,7 @@ export class Characters {
     this.list.set(p.id, c);
     if (this.ok) this.setupChar(c);
   }
-  setupChar(c) { c.look = lookFor(c.p); c.team = c.p.team; c.row = this.rowFor(c.look); c.gearList = this.gear.listFor(c.look.variant, true); c.gearNoHelm = this.gear.listFor(c.look.variant, false); }
+  setupChar(c) { c.look = c.force ? forcedLook(c.p, c.force) : lookFor(c.p); c.team = c.p.team; c.row = this.rowFor(c.look); c.gearList = this.gear.listFor(c.look.variant, true); c.gearNoHelm = this.gear.listFor(c.look.variant, false); }
   remove(p) {
     if (this.fallback) return this.fallback.remove(p);
     const c = this.list.get(p.id); if (!c) return;
@@ -181,13 +182,17 @@ export class Characters {
     const v = c.gm.muzzle.getAbsolutePosition(); out.x = v.x; out.y = v.y; out.z = v.z; return out;
   }
   poseOf(p) { const c = this.list.get(p.id); return c ? c.O : null; }
+  /** dev: the hitbox overlay on / off (also #dev&hitboxes) */
+  showHitboxes(on) { this.debug.hitboxes = !!on; if (on && !this.overlay && this.ok) this.overlay = new HitboxOverlay(this.scene); if (this.overlay) this.overlay.enabled = !!on; }
+  /** tests / line-ups: force a team kit variant (index into TEAM_KIT[team]) and skin index; null restores the id-based look */
+  setLook(p, team, vi, skin) { const c = this.list.get(p.id); if (!c) return; c.force = team == null ? null : { team, vi, skin }; if (this.ok) this.setupChar(c); }
 
   // ------------------------------------------------------------------------------------------------ per frame
   frame(dt, alpha) {
     if (this.fallback) return this.fallback.frame(dt, alpha);
     if (!this.ok) return;
     const t0 = performance.now();
-    dt = Math.min(dt || 0, 0.1);
+    dt = Math.min(dt || 0, 0.1) * this.timeScale;
     const g = this.g, cam = g.camera;
     if (this.debug.cam && cam) { const d = this.debug.cam; cam.position.set(d.pos[0], d.pos[1], d.pos[2]); cam.setTarget(new BABYLON.Vector3(d.target[0], d.target[1], d.target[2])); if (d.fov) cam.fov = d.fov; }
     const cx = cam ? cam.position.x : 0, cy = cam ? cam.position.y : 0, cz = cam ? cam.position.z : 0;
@@ -244,7 +249,11 @@ export class Characters {
     const I = c.I || (c.I = { pos: null, vel: null, grip: null, reload: null, melee: null, nade: null, ground: null });
     I.pos = st.pos; I.vel = st.vel; I.yaw = st.yaw; I.pitch = st.pitch; I.crouch = st.crouch; I.lean = st.lean;
     I.onGround = p.onGround; I.mantle = !!p.mantle; I.t = g.time;
-    I.action = p.action || null;
+    // the simulation's gait (player.js updateGait) for players simulated here: the drawn legs then match the hitbox legs; remote
+    // players (net clients) have no simulated gait, anim.js runs the same gait model from their interpolated speed
+    if (!p.remote && p.gaitS != null) { I.gait = p.gait || 0; I.gaitK = p.gaitK || 0; I.gaitS = p.gaitS; I.gaitSt = p.gaitSt; I.gaitH = p.gaitH; I.gaitDir = p.gaitDir || 0; }
+    else I.gait = I.gaitK = null;
+    I.action = p.busy === 'plant' || p.busy === 'defuse' || p.busy === 'pickup' ? (p.busy === 'pickup' ? 'defuse' : p.busy) : (p.action || null);   // objectives.js kneel
     let hold = 'none';
     if (p.cur === 'nade') hold = 'nade';
     else if (w && w.melee) hold = 'knife';
@@ -529,6 +538,10 @@ function invCompose(out, H, L) {
   const lo = L.o;
   for (let k = 0; k < 3; k++) out.o[k] = H.o[k] - (out.x[k] * lo[0] + out.y[k] * lo[1] + out.z[k] * lo[2]);
   return out;
+}
+function forcedLook(p, f) {
+  const team = f.team === 1 || f.team === 2 ? f.team : 0, list = TEAM_KIT[team], vi = ((f.vi | 0) % list.length + list.length) % list.length, si = ((f.skin | 0) % SKIN.length + SKIN.length) % SKIN.length;
+  return { team, variant: list[vi], skin: SKIN[si], accent: ACCENT[team], key: team + ':' + vi + ':' + si };
 }
 function hashId(s) { let h = 0x811c9dc5; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 

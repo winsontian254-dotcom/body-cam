@@ -93,7 +93,7 @@ function filingCabinet(K, o, v, rnd) {
   K.col(0, 0, 0, .47, H, .62, { surf: 'metal' });
 }
 function bookshelf(K, o, v, rnd) {
-  const W = o.w || .9, H = 2.0, D = .32, metal = v === 'metal', mat = metal ? 'p_paint_grey' : v === 'white' ? 'p_wood_white' : 'p_wood_walnut', n = 5;
+  const W = o.w || .9, H = 2.0, D = .32, metal = v === 'metal', mat = metal ? 'p_paint_grey' : v === 'white' ? 'p_lacquer_white' : 'p_wood_walnut', n = 5;
   for (const s of [-1, 1]) K.box(mat, s * (W / 2 - .01), 0, 0, .02, H, D);
   K.box(mat, 0, 0, -D / 2 + .005, W, H, .01); K.box(mat, 0, H - .02, 0, W, .02, D); K.box(mat, 0, 0, 0, W, .06, D);
   for (let i = 1; i < n; i++) K.box(mat, 0, i * H / n - .01, 0, W - .04, .02, D - .01);
@@ -191,7 +191,7 @@ function wardrobe(K, o, v, rnd) {
 
 // ------------------------------------------------------------------------------------------------ kitchen, dining, bar
 function kitchen(K, o, v, rnd) {
-  const L = o.len || 2.4, D = .62, H = .9, n = Math.max(1, Math.round(L / .6)), mod = L / n, door = v === 'white' ? 'p_wood_white' : v === 'grey' ? 'p_paint_grey' : 'p_wood_light';
+  const L = o.len || 2.4, D = .62, H = .9, n = Math.max(1, Math.round(L / .6)), mod = L / n, door = v === 'white' ? 'p_lacquer_white' : v === 'grey' ? 'p_paint_grey' : 'p_wood_light';
   K.box('p_plastic_dark', 0, 0, .02, L, .1, D - .1);
   K.box(door, 0, .1, -.02, L, H - .14, D - .06);
   const sinkAt = o.sink == null ? Math.floor(n / 2) : o.sink, hobAt = o.hob == null ? (n > 2 ? n - 1 : -1) : o.hob;
@@ -220,7 +220,7 @@ function kitchen(K, o, v, rnd) {
   K.col(0, 0, 0, L, H, D, { surf: 'wood' });
 }
 function fridge(K, o, v, rnd) {
-  const mat = v === 'white' ? 'paint_white' : v === 'black' ? 'paint_black' : 'p_stainless', W = .7, H = 1.85, D = .7;
+  const mat = v === 'white' ? 'p_enamel_white' : v === 'black' ? 'p_enamel_black' : 'p_stainless', W = .7, H = 1.85, D = .7;
   K.box(mat, 0, .03, 0, W, H - .03, D, { bev: .02 });
   K.box('p_plastic_dark', 0, 0, .05, W - .1, .06, D - .2);
   panelLines(K, [[-W / 2 + .02, 1.2, W / 2 - .02, 1.2]], D / 2 + .001, { t: .008 });
@@ -229,7 +229,7 @@ function fridge(K, o, v, rnd) {
   K.col(0, 0, 0, W, H, D, { surf: 'metal' });
 }
 function stove(K, o, v, rnd) {
-  const mat = v === 'white' ? 'paint_white' : 'p_stainless', W = .6, H = .9, D = .62;
+  const mat = v === 'white' ? 'p_enamel_white' : 'p_stainless', W = .6, H = .9, D = .62;
   K.box(mat, 0, .05, 0, W, H - .05, D, { bev: .01 }); K.box('p_plastic_dark', 0, 0, 0, W - .04, .06, D - .06);
   K.box('p_glass_dark', 0, .2, D / 2 + .005, .46, .36, .01); K.noCast('p_glass_dark');
   K.box('p_chrome', 0, .62, D / 2 + .03, .44, .02, .02); K.box('p_chrome', -.2, .6, D / 2 + .01, .02, .03, .03); K.box('p_chrome', .2, .6, D / 2 + .01, .02, .03, .03);

@@ -2542,7 +2542,8 @@ BUILDERS.ar = (K, S, gun, ctx) => {
     side: [[S.hg === 'quad' ? qR + 8.2 : 20.2, S.hg === 'quad' ? qyc : yc, zN + hgL * .62]], mag: [[0, 9, mzc]], stock: [[0, yB - 1, zR - 8]], barrel: [[0, yB, zN]] });
   muzzleNode(K, yB, zM + md + .2); ejectNode(K, [hw + 1, yB - 1, (p0 + p1) / 2]);
   handNodes(K, hr, { p: [0, yc - 20.2, zN + hgL * .42], kind: 'hold' });
-  K.meta.stock = { kind: 'tube', y: yB - 1, z: zR - 8, tube: S.stockLen ? S.stockLen - 40 : 180, r: 14.6 };
+  // PRS stock: only a 40 mm stub stays on the gun, so a replacement stock brings its own adapter + tube ('fixed')
+  K.meta.stock = S.stock === 'prs' ? { kind: 'fixed', y: yB - 1, z: zR - 8 } : { kind: 'tube', y: yB - 1, z: zR - 8, tube: S.stockLen ? S.stockLen - 40 : 180, r: 14.6 };
   void sight;
 };
 Object.assign(MODEL_SPECS, {
@@ -3555,7 +3556,7 @@ function meleeSpec(K, g) {
   if (id === 'knife' || g.archetype === 'knife') {
     // drop-point fixed blade: black coated with a bright ground edge, polymer handle with finger grooves, guard, pommel + lanyard hole
     const L = (g.model.blade || .165) * 1000, zg = 34;
-    bladeLoft(K, { z0: zg, z1: zg + L, th: 4.6, mat: 'blade', spine: t => t < .62 ? 15 - t * 3 : 13 - (t - .62) / .38 * 13.5, edge: t => t < .7 ? -16 : -16 + Math.pow((t - .7) / .3, 1.6) * 15.4, grind: t => (t < .62 ? 15 - t * 3 : 13 - (t - .62) / .38 * 13.5) * .3 + (t < .7 ? -16 : -16 + Math.pow((t - .7) / .3, 1.6) * 15.4) * .7 + 9 });
+    bladeLoft(K, { z0: zg, z1: zg + L, th: 4.6, mat: 'blade', spine: t => t < .62 ? 15 - t * 3 : 13 - (t - .62) / .38 * 13.5, edge: t => t < .7 ? -16 : -16 + Math.pow((t - .7) / .3, 1.6) * 15.4, grind: t => { const ys = t < .62 ? 15 - t * 3 : 13 - (t - .62) / .38 * 13.5, ye = t < .7 ? -16 : -16 + Math.pow((t - .7) / .3, 1.6) * 15.4; return ye + Math.max(0, ys - ye) * .48; } });   // grind line always between edge and spine (no inverted flap at the tip)
     K.mat('blade').extrude(SH(K, [[zg - 3, -17], [zg + 14, -17], [zg + 14, 14], [zg - 3, 15]], .4), D(4.6), { b: D(.6), bs: 1 });            // ricasso
     if (K.detail(0)) for (let k = 0; k < 7; k++) K.mat('blade').box(D(5), D(1.2), D(2), { p: P3(0, 14.6, zg + 10 + k * 4.5), b: D(.3) });     // spine jimping
     K.mat('metal').extrude(SH(K, [[-4, -24, 1], [3, -26, 2], [4, -16], [4, 18, 2], [-4, 20, 2], [-5, -10]], .4), D(14), { p: P3(0, 0, zg - 7), b: D(1.2), bs: 3 });   // guard
@@ -3575,12 +3576,12 @@ function meleeSpec(K, g) {
   if (id === 'zafra' || g.archetype === 'machete') {
     // cane-cutter machete: long thin blade widening toward the tip, hooked spine at the end, two riveted wooden scales
     const L = (g.model.blade || .46) * 1000, zg = 20;
-    bladeLoft(K, { z0: zg, z1: zg + L, th: 3.2, mat: 'blade', n: 48, spine: t => 12 + t * 18 + (t > .9 ? (t - .9) / .1 * 12 : 0), edge: t => -16 - t * 24 + (t > .94 ? (t - .94) / .06 * 34 : 0), grind: t => -6 - t * 12 });
+    bladeLoft(K, { z0: zg, z1: zg + L, th: 3.2, mat: 'blade', n: 48, spine: t => 12 + t * 18 + (t > .9 ? (t - .9) / .1 * 12 : 0), edge: t => -16 - t * 24 + (t > .94 ? (t - .94) / .06 * 34 : 0), grind: t => { const ys = 12 + t * 18 + (t > .9 ? (t - .9) / .1 * 12 : 0), ye = -16 - t * 24 + (t > .94 ? (t - .94) / .06 * 34 : 0); return ye + (ys - ye) * .3; } });
     if (K.detail(1)) K.mat('blade').extrude(SH(K, [[zg + L - 20, 26], [zg + L - 2, 42, 2], [zg + L + 2, 40], [zg + L - 6, 26]], .4), D(3), { b: D(.6), bs: 1 });   // hook
     K.mat('blade').extrude(SH(K, [[-110, -12, 4], [zg + 8, -16], [zg + 8, 13], [-110, 10, 4]], .4), D(3.2), { b: D(.4), bs: 1 });                // tang
     for (const sx of [-1, 1]) K.mat('wood').extrude(SH(K, [[-118, -16, 8], [zg - 4, -18, 3], [zg - 2, 15, 3], [-118, 12, 8], [-128, -2, 6]], .8), D(7), { off: sx > 0 ? D(1.6) : -D(8.6), b: D(2.6), bs: K.lod ? 1 : 3 });
     if (K.detail(0)) for (const zz of [-90, -40, 0]) K.mat('brass').cyl(D(3), D(19.4), { p: P3(0, -1, zz), axis: 'x', c: true, segs: 14 });
-    if (K.detail(0)) K.mat('cord').sweep([P3(0, 0, -122), P3(0, 14, -146), P3(0, 0, -172), P3(0, -14, -146), P3(0, 0, -122)], { rad: D(2), segs: 8 });
+    if (K.detail(0)) K.mat('cord').sweep(Array.from({ length: 17 }, (_, k) => { const a = k / 16 * Math.PI * 2; return P3(Math.sin(a * 2) * 1.5, Math.sin(a) * 13, -122 - (1 - Math.cos(a)) * 24); }), { rad: D(2.2), segs: 8 });   // lanyard loop
     K.node('tip', P3(0, 0, zg + L), [0, 0, 0]); K.node('edge0', P3(0, -18, zg + 30), [0, 0, 0]); K.node('edge1', P3(0, -38, zg + L - 30), [0, 0, 0]); K.node('pommel', P3(0, 0, -128), [0, 0, 0]);
     return { hand: [0, -2, -50], pal: { blade: 'blade', edge: 'edge', wood: 'walnut', metal: 'dksteel' } };
   }

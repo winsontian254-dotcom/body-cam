@@ -1,5 +1,5 @@
 /* LIVE FIRE — Tab scoreboard (js/ui/scoreboard.js). */
-.lf-hud .sb2 { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1040px, 95vw); max-height: 90vh; overflow: auto; display: none; padding: 14px 18px 12px;
+.lf-hud .sb2 { z-index: 10; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1040px, 95vw); max-height: 90vh; overflow: auto; display: none; padding: 14px 18px 12px;
   background: rgba(8,9,10,.92); border: 1px solid rgba(236,235,230,.16); border-top: 2px solid rgba(236,235,230,.4); font: 12px/1.35 var(--lf-mono); text-shadow: none; color: #d8d5ce; }
 .lf-hud .sb2.on { display: block; }
 .sb2-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; letter-spacing: .22em; }

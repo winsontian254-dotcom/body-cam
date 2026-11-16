@@ -104,8 +104,8 @@ export const NADE_SHAPES = {
     K.mat('glass').lathe(LP(prof), { axis: 'y', segs: 34, crease: 40 });
     K.mat('liquid').lathe(LP([[0, y0 + 2], [R - 3, y0 + 2], [R - 2, y0 + 6], [R - 2, ys - 18], [0, ys - 18]]), { axis: 'y', segs: 28 });
     const rag = []; for (let k = 0; k <= 6; k++) { const t = k / 6; rag.push(P3(Math.sin(t * 5) * 3, yn - 12 + t * 46, Math.cos(t * 4) * 3)); }
-    K.mat('rag').sweep(rag, { rads: rag.map((_, k) => D(9 - k * .8)), segs: 9 });
-    K.mat('rag').sweep([P3(10, yn + 2, 0), P3(16, yn - 10, 4), P3(14, yn - 40, 10), P3(10, yn - 60, 6)], { rad: D(3.4), sx: 1.8, sy: .5, segs: 8, up: [0, 0, 1] });
+    K.mat('rag').sweep(rag, { rads: [10.5, 11.5, 15, 14, 12.5, 9.5, 6].map(D), segs: 11 });   // stuffed in the neck, bunched above it
+    K.mat('rag').sweep([P3(10, yn + 2, 0), P3(16, yn - 10, 4), P3(14, yn - 40, 10), P3(10, yn - 60, 6)], { rad: D(3.6), sx: 2.6, sy: .45, segs: 8, up: [0, 0, 1] });
     if (K.detail(0)) K.mat('cord').lathe(LP([[13.7, yn + 2], [14.4, yn + 3], [14.4, yn + 7], [13.7, yn + 8]]), { axis: 'y', segs: 26 });
     K.node('flame', P3(0, yn + 34, 0), [0, 0, 0]);
     return { top: yn + 34, grip: [0, ys - 30, 0] };

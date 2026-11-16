@@ -41,7 +41,7 @@ export default {
 
   build(B) {
     ground(B); shell(B); floorsAndRoofs(B); groundFloor(B); firstFloor(B); basement(B); stairs(B); garage(B); outdoors(B);
-    lights(B); markers(B); skylineAll(B);
+    dress(B); lights(B); markers(B); skylineAll(B);
     flushDecals(B);
   },
 };
@@ -471,14 +471,14 @@ function markers(B) {
     [-9, F0, 36, PI2 * 2], [-26, F1, 32, PI2], [32, F0, 35, -PI2], [-24, F0, 34, PI2], [2, FB, 14, PI2 * 2]]) B.spawn(2, x, y, z, yaw, { field: true });
   // FFA spawns over the whole map
   for (const [x, y, z] of [[-44, 0, -44], [-14, .12, -52], [16, 0, -50], [44, 0, -36], [56, 0, -20], [56, 0, 30], [-44, 0, -6], [-22, 0, 4], [-40, 0, 24],
-    [-6, 0, -10], [10, 0, -10], [-10, 0, 14], [24, 0, -6], [44, 0, -8], [34, 0, 24], [44, 0, 22], [-40, F1, 9], [-22, F1, 28], [-8, F1, 30], [10, F1, 30],
+    [-6, 0, -10], [10, 0, -10], [-10, 0, 14], [27.5, 0, -7.5], [44, 0, -8], [34, 0, 24], [44, 0, 22], [-40, F1, 9], [-22, F1, 28], [-8, F1, 30], [10, F1, 30],
     [-13, F1, -10], [-40, FB, 28], [-24, FB, 35], [28, FB, 34], [36, FB, 22], [8, F0, 36]])
     B.spawn(0, x, y, z, Math.atan2(-x, -z));
   // sites
   B.site('A', { x0: -47.6, z0: 16.4, x1: -32.4, z1: 29.6, y: F1 });
   B.site('B', { x0: 26.4, z0: 6, x1: 39.6, z1: 28, y: F0 });
   // hostages + rescue at the ambulance station apron
-  B.hostage(-43, F0, 13); B.hostage(-12, F0, 36); B.hostage(11, F1, 35); B.hostage(30, FB, 34); B.hostage(10, F0, 34);
+  B.hostage(-43, F0, 13); B.hostage(-13.6, F0, 38.5); B.hostage(11, F1, 35); B.hostage(30, FB, 34); B.hostage(10, F0, 34);
   B.rescue({ x0: -12, z0: -69, x1: 12, z1: -62.5, y: 0 });
   // objectives for the other modes
   B.point('dom1', -30, F0, -7, 4); B.point('dom2', 3, F0, -3, 4); B.point('dom3', 29, F0, -7, 4);
@@ -508,4 +508,307 @@ function skylineAll(B) {
   for (let z = -80; z < 50; z += 20) { skyline(B, -78 - r(0, 8, k++), z, 12, 14 + r(0, 6, k++), 10 + r(0, 20, k++), { u: r(0, 1, k++) }); }
   for (let z = -80; z < 50; z += 20) { skyline(B, 82 + r(0, 8, k++), z, 12, 14 + r(0, 6, k++), 10 + r(0, 24, k++), { u: r(0, 1, k++) }); }
   for (let x = -60; x < 70; x += 22) { skyline(B, x, 78 + r(0, 10, k++), 16, 14, 16 + r(0, 30, k++), { u: r(0, 1, k++) }); }
+}
+
+// =============================================================================================================== dressing
+// rotations: the front of a prop faces +z at ry 0; FX = front +x, BX = front -x, SZ = front -z
+const FX = Math.PI / 2, BX = -Math.PI / 2, SZ = Math.PI;
+const pr = (B, type, x, y, z, o = {}) => B.prop(type, x, y, z, o);
+/** overhead duct / cable tray / pipe run (visual, no collider): along x or z at height y */
+function run(B, x0, z0, x1, z1, y, w = .4, h = .3, mat = 'p_galv') {
+  const L = Math.hypot(x1 - x0, z1 - z0), alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+  B.box((x0 + x1) / 2, y, (z0 + z1) / 2, alongX ? L : w, h, alongX ? w : L, { mat, collide: false, cast: false });
+  // hangers every 2.4 m
+  for (let f = 1.2; f < L; f += 2.4) { const x = x0 + (x1 - x0) * f / L, z = z0 + (z1 - z0) * f / L; B.box(x, y + h, z, .03, .35, .03, { mat: 'p_galv', collide: false, cast: false }); }
+}
+function dress(B) {
+  dressGround(B); dressFirst(B); dressBasement(B); dressGarage(B); dressOutside(B); signage(B);
+}
+
+function dressGround(B) {
+  const y = F0, C = C0;
+  // ---- ED hall: triage desk, waiting rows, vending, trolleys
+  P(B, 'counter', -27.5, y, -2.6, { ry: SZ, len: 5 });
+  for (const [x, z, n, ry] of [[-43, -9, 6, 0], [-43, -6, 6, 0], [-25.5, -11.6, 5, 0], [-20.5, -11.6, 5, 0], [-25.5, -8.6, 5, SZ]]) P(B, 'seats', x, y, z, { n, ry, broken: true });
+  pr(B, 'vending_machine', -47.35, y, -12.4, { ry: FX, variant: 'drinks', on: false }); pr(B, 'vending_machine', -47.35, y, -11.3, { ry: FX, variant: 'snacks' });
+  P(B, 'wheelchair', -46.2, y, -1.1, { ry: SZ }); P(B, 'wheelchair', -45.4, y, -1.3, { ry: SZ + .3 });
+  pr(B, 'gurney', -18.5, y, -1.2, { ry: FX }); pr(B, 'litter_bin', -31.2, y, -13.4, { variant: 'square' });
+  P(B, 'debris', -38.5, y, -6.5); pr(B, 'trash_bag', -46.5, y, -13.2, { n: 4 });
+  pr(B, 'wall_clock', -27.5, 2.45, -.16, { ry: SZ }); pr(B, 'fire_extinguisher', -16.2, y, -1.5, { ry: BX });
+  pr(B, 'poster', -40, 1.2, -.16, { ry: SZ, i: 2 }); pr(B, 'poster', -19, 1.2, -.16, { ry: SZ, i: 4 });
+  P(B, 'gel', -32.4, y, -.16, { ry: SZ });
+  fixtures(B, -48, -14, -16, 0, C, { dx: 4, dz: 3.5, on: .45 });
+  // ---- X-ray, plaster room, stair W lobby
+  P(B, 'xray', -42, y, 15.2);
+  pr(B, 'shelf_unit', -47.55, y, 10.5, { ry: FX, variant: 'grey' }); pr(B, 'office_chair', -38, y, 9.5, { ry: SZ });
+  pr(B, 'medical_cart', -47.4, y, 22, { ry: FX, variant: 'red' }); P(B, 'trolley', -40.5, y, 27.5, {});
+  pr(B, 'shelf_unit', -41, y, 29.5, { ry: SZ, variant: 'grey' }); pr(B, 'shelf_unit', -39.8, y, 29.5, { ry: SZ, variant: 'grey' });
+  pr(B, 'hospital_bed', -44.5, y, 22.4, { ry: FX, monitor: false });
+  P(B, 'cage', -38.5, y, 38.8, { ry: SZ }); P(B, 'wheelchair', -43.6, y, 39.2, { ry: SZ });
+  fixtures(B, -48, 8, -36, 30, C, { dx: 4, dz: 3.6, on: .35 });
+  fixtures(B, -36, 0, -32, 40, C, { dx: 4, dz: 4, kind: 'strip', on: .5 });
+  // ---- Majors: curtained bays along both walls, nurses' station
+  for (const z of [2.6, 5.6, 8.6, 14, 17, 20]) {
+    pr(B, 'hospital_bed', -30.75, y, z, { ry: FX, monitor: z % 2 > 1 });
+    P(B, 'curtainbay', -30.55, y, z, { ry: FX, w: 2.7, d: 2.6, ceil: C - .05, fab: 'p_fab_teal' });
+  }
+  for (const z of [2.6, 5.6, 14, 17, 20]) {
+    pr(B, 'hospital_bed', -17.25, y, z, { ry: BX, monitor: z % 2 < 1 });
+    P(B, 'curtainbay', -17.45, y, z, { ry: BX, w: 2.7, d: 2.6, ceil: C - .05, fab: 'p_fab_teal' });
+  }
+  P(B, 'counter', -24, y, 7, { len: 3.2 }); pr(B, 'medical_cart', -21.5, y, 9.5, { ry: SZ, variant: 'red' });
+  P(B, 'ivstand', -27, y, 15.5, {}); P(B, 'ivstand', -21, y, 3, {}); pr(B, 'gurney', -24, y, 18.5, { ry: .3 });
+  fixtures(B, -32, 0, -16, 22, C, { dx: 4, dz: 3.2, kind: 'strip', on: .35 });
+  // ---- Decon / store
+  for (const x of [-30.4, -29.2, -26, -24.8]) pr(B, 'shelf_unit', x, y, 39.55, { ry: SZ, variant: 'grey' });
+  pr(B, 'pallet', -20, y, 37.5, { variant: 'boxes', h: .9 }); pr(B, 'cardboard_box', -18.5, y, 30, { variant: 'pile', n: 6 });
+  P(B, 'cage', -29, y, 28, { ry: .4 }); P(B, 'wheelchair', -17.5, y, 38, { ry: SZ });
+  fixtures(B, -32, 26, -16, 40, C, { dx: 4, dz: 3.5, on: .25 });
+  // ---- atrium: information desk, coffee kiosk, waiting rows, dead planters
+  P(B, 'counter', 0, y, -.6, { ry: SZ, len: 4.4 });
+  P(B, 'kiosk', 10, y, 6.3, { ry: SZ });
+  for (const [x, z, ry] of [[7, -8.2, 0], [7, -9.0, SZ], [12, -8.2, 0], [12, -9.0, SZ], [-4, -4, 0]]) P(B, 'seats', x, y, z, { n: 5, ry, broken: true });
+  P(B, 'planterdead', -6.2, y, -12.6, { len: 2.4 }); P(B, 'planterdead', 6.2, y, -12.6, { len: 2.4 });
+  P(B, 'planterdead', -14, y, 3, { len: 2.4, ry: FX });
+  pr(B, 'vending_machine', 15.4, y, 1.2, { ry: BX, variant: 'drinks' }); pr(B, 'vending_machine', 15.4, y, 2.3, { ry: BX, variant: 'snacks', on: false });
+  pr(B, 'atm', 15.55, y, 4.4, { ry: BX, variant: 'wall' });
+  pr(B, 'litter_bin', 3.6, y, -13.2, { variant: 'round' }); pr(B, 'litter_bin', -3.6, y, -13.2, { variant: 'round' });
+  pr(B, 'scan_wet_floor_sign', 1.5, y, -6, { ry: .5 }); P(B, 'debris', 8, y, -2.5); P(B, 'debris', -3, y, 4.5);
+  P(B, 'wheelchair', 13.5, y, -12.5, { ry: 2.6 });
+  for (const [x, z] of [[-6, -8], [6, -8], [-6, -1], [6, -1], [0, -11]]) pr(B, 'light_fixture', x, ATR, z, { variant: 'pendant', drop: 2.6, on: x !== 6 || z !== -1 });
+  fixtures(B, -16, -14, -11, 4, 3.6, { dx: 5, dz: 3.6, on: .5 });
+  fixtures(B, -11, 4, 16, 8, 3.6, { dx: 3.6, dz: 4, on: .4 });
+  // ---- admissions office (carpet): workstations, filing
+  for (const [x, z] of [[-13.2, 12.5], [-7, 12.5], [-13.2, 16.5], [-7, 16.5]]) pr(B, 'workstation', x, y, z, { variant: 'single', on: false });
+  for (const z of [18.6, 19.1, 19.6, 20.1, 20.6]) pr(B, 'filing_cabinet', -15.55, y, z, { ry: FX, open: z === 19.6 ? 1 : -1 });
+  pr(B, 'whiteboard', -10, 1.0, 21.82, { ry: SZ, w: 2.4 });
+  fixtures(B, -16, 8, -4, 22, C, { dx: 3, dz: 3.5, on: .2 });
+  // ---- lift lobby
+  P(B, 'lift', -3.85, y, 12.5, { ry: FX }); P(B, 'lift', -3.85, y, 18, { ry: FX });
+  fixtures(B, -4, 8, 4, 22, C, { dx: 4, dz: 3.5, kind: 'pendant', on: .5 });
+  // ---- main corridor
+  P(B, 'seats', -6, y, 25.6, { n: 4, ry: SZ }); pr(B, 'gurney', -26, y, 22.6, { ry: FX }); P(B, 'cage', 12, y, 22.5, { ry: 0 });
+  fixtures(B, -32, 22, 16, 26, C, { dx: 4, dz: 4, kind: 'strip', on: .4 });
+  // ---- chapel: pews, altar
+  for (const z of [29.6, 31.6, 33.6, 35.6]) { P(B, 'pew', -12.8, y, z, { len: 3 }); P(B, 'pew', -5.7, y, z, { len: 3 }); }
+  B.box(-9, y, 38.7, 1.9, .9, .8, { mat: 'p_wood_walnut', surf: 'wood' }); B.box(-9, y + .9, 38.7, 2.0, .02, .85, { mat: 'p_fab_white', collide: false });
+  B.box(-9, 1.6, 39.82, .12, 1.2, .04, { mat: 'p_wood_walnut', collide: false }); B.box(-9, 2.0, 39.82, .6, .12, .04, { mat: 'p_wood_walnut', collide: false });
+  fixtures(B, -16, 26, -2, 40, C, { dx: 4.5, dz: 4.5, kind: 'pendant', warm: true, on: .5 });
+  // ---- medical records
+  for (const z of [30.2, 33.2, 36.2]) for (const x of [.6, 1.8, 3, 4.2, 9.6, 10.8, 12, 13.2]) pr(B, 'shelf_unit', x, y, z, { variant: 'grey', ry: (x * 7 + z) % 2 > 1 ? 0 : SZ });
+  for (const z of [27, 27.5, 28, 28.5, 29]) pr(B, 'filing_cabinet', 15.55, y, z, { ry: BX, color: 'beige' });
+  pr(B, 'cardboard_box', 6.5, y, 38.5, { variant: 'pile', n: 8 }); pr(B, 'cardboard_box', 2, y, 27.5, { variant: 'pile', n: 5 });
+  fixtures(B, -2, 26, 16, 40, C, { dx: 4.5, dz: 3, kind: 'strip', on: .25 });
+  // ---- outpatients hall and clinics
+  for (const [x, z, ry] of [[22, -9, 0], [22, -6, 0], [34.5, -9, 0], [34.5, -6, 0], [22, -2.6, SZ]]) P(B, 'seats', x, y, z, { n: 6, ry, broken: true });
+  P(B, 'counter', 31, y, 1.6, { ry: SZ, len: 4 });
+  pr(B, 'vending_machine', 39.4, y, -13, { ry: BX, variant: 'drinks', on: false }); pr(B, 'tv', 28, 2.0, -13.8, { wall: true, on: false });
+  P(B, 'wheelchair', 17.2, y, -12.6, { ry: .8 }); pr(B, 'litter_bin', 26.5, y, -13.3, { variant: 'square' }); P(B, 'debris', 36, y, -2.6);
+  fixtures(B, 16, -14, 40, 4, C, { dx: 4, dz: 3.6, on: .35 });
+  pr(B, 'desk', 44.5, y, -6.1, { ry: SZ, variant: 'metal' }); pr(B, 'office_chair', 44.5, y, -7, { ry: SZ });
+  pr(B, 'hospital_bed', 46.6, y, -10, { ry: BX, monitor: false });
+  pr(B, 'hospital_bed', 46.6, y, -1.2, { ry: BX, monitor: false }); pr(B, 'desk', 44, y, 3.3, { ry: SZ, variant: 'metal' }); pr(B, 'filing_cabinet', 41, y, 3.5, { ry: SZ });
+  fixtures(B, 40, -14, 48, 4, C, { dx: 4, dz: 4.5, on: .3 });
+  // ---- outpatients corridor (pharmacy queue)
+  P(B, 'seats', 16.5, y, 9.2, { n: 4, ry: FX }); P(B, 'seats', 16.5, y, 14, { n: 4, ry: FX });
+  P(B, 'wheelchair', 17.3, y, 28.5, { ry: 2 }); pr(B, 'fire_extinguisher', 16.2, y, 20.5, { ry: FX });
+  fixtures(B, 16, 4, 26, 30, C, { dx: 5, dz: 4, kind: 'strip', on: .4 });
+  // ---- PHARMACY (B site): dispensary islands, shelving on the walls, fridges, the CD safe
+  for (const x of [28.6, 32.8, 37]) P(B, 'medshelf', x, y, 4.38, { len: 4, sparse: x > 35 });
+  P(B, 'medshelf', 30.4, y, 9.6, { ry: FX, len: 4 }); P(B, 'medshelf', 30.86, y, 9.6, { ry: BX, len: 4, empty: true });
+  P(B, 'medshelf', 30.4, y, 22.4, { ry: FX, len: 4, sparse: true }); P(B, 'medshelf', 30.86, y, 22.4, { ry: BX, len: 4 });
+  P(B, 'medshelf', 36.4, y, 22.4, { ry: FX, len: 3, empty: true });
+  B.box(35.8, y, 9.5, 2.4, .92, .7, { mat: 'p_paint_cream', mats: { t: 'p_stainless' }, surf: 'wood' });   // dispensing bench
+  P(B, 'drugfridge', 27, y, 29.3, { ry: SZ }); P(B, 'drugfridge', 27.7, y, 29.3, { ry: SZ }); P(B, 'cdsafe', 39.4, y, 7, { ry: BX });
+  for (const [x, z, n] of [[34.5, 15, 5], [28.5, 17.5, 4], [38.6, 27.6, 6]]) pr(B, 'cardboard_box', x, y, z, { variant: 'pile', n });
+  P(B, 'debris', 33.5, y, 18); pr(B, 'office_chair', 35.6, y, 10.5, { ry: 2.5 });
+  fixtures(B, 26, 4, 40, 30, C, { dx: 3.5, dz: 3.2, on: .4 });
+  // ---- stock room (loading door from the yard)
+  pr(B, 'rack', 47.0, y, 9, { ry: BX, bays: 2, levels: 2, lh: 1.25, load: .8 }); pr(B, 'rack', 47.0, y, 25, { ry: BX, bays: 2, levels: 2, lh: 1.25, load: .6 });
+  pr(B, 'pallet', 43, y, 8, { variant: 'boxes', h: 1.1 }); pr(B, 'pallet', 43.2, y, 24.5, { variant: 'wrap', stack: 1 }); pr(B, 'pallet_jack', 44, y, 20.5, { ry: 1.2 });
+  pr(B, 'cardboard_box', 42, y, 28.8, { variant: 'pile', n: 6 });
+  fixtures(B, 40, 4, 48, 30, C, { dx: 4, dz: 4.5, kind: 'strip', on: .3 });
+  // ---- staff lockers
+  for (const x of [24, 29.5, 35]) pr(B, 'lockers', x, y, 39.55, { ry: SZ, n: 8, open: [2, 5], bench: x !== 29.5 });
+  pr(B, 'lockers', 20.5, y, 33, { ry: FX, n: 4, variant: 'blue' });
+  fixtures(B, 20, 30, 44.4, 40, C, { dx: 4, dz: 5, kind: 'strip', on: .3 });
+}
+
+function dressFirst(B) {
+  const y = F1, C = C1;
+  // theatre corridor and office
+  pr(B, 'gurney', -30, y, 8, { ry: FX }); P(B, 'trolley', -22, y, 10.3, {}); P(B, 'cage', -46.5, y, 9.5, { ry: FX });
+  pr(B, 'desk', -45.5, y, 3, { ry: FX, variant: 'metal' }); pr(B, 'office_chair', -44.7, y, 3, { ry: BX }); pr(B, 'filing_cabinet', -39.2, y, 6.5, { ry: SZ });
+  P(B, 'sharps', -47.8, y + 1.1, 5.5, { ry: FX });
+  fixtures(B, -48, 7, -16, 11, C, { dx: 4, dz: 4, kind: 'strip', on: .4 });
+  fixtures(B, -48, 0, -38, 7, C, { dx: 5, dz: 3.5, on: .3 });
+  fixtures(B, -36, 0, -16, 7, C, { dx: 4, dz: 3.5, on: .2 });
+  // anaesthetic / prep room
+  P(B, 'scrub', -45, y, 15.85, { ry: SZ }); P(B, 'trolley', -35.5, y, 13, {}); P(B, 'trolley', -36.6, y, 14.3, {});
+  pr(B, 'medical_cart', -33, y, 15.4, { ry: SZ, variant: 'blue' });
+  fixtures(B, -48, 11, -32, 16, C, { dx: 4, dz: 5, on: .5 });
+  // THEATRE 1 (A site)
+  P(B, 'optable', -40, y, 23); P(B, 'oplight', -40, C, 23); P(B, 'anaes', -40, y, 20.3, { ry: SZ });
+  P(B, 'tower', -36.9, y, 24.5, {}); P(B, 'tower', -43.4, y, 25.6, {}); P(B, 'trolley', -37.2, y, 21, {}); P(B, 'ivstand', -42.5, y, 21.5, {});
+  P(B, 'medshelf', -47.6, y, 22.5, { ry: FX, len: 2, sparse: true }); P(B, 'medshelf', -47.6, y, 26.5, { ry: FX, len: 2 });
+  pr(B, 'wardrobe', -47.25, y, 18.2, { ry: FX, variant: 'large', open: true, mat: 'p_stainless' });
+  P(B, 'debris', -35, y, 28);
+  fixtures(B, -48, 16, -32, 30, C, { dx: 4, dz: 3.5, kind: 'troffer', on: .6 });
+  // recovery: beds round the walls
+  for (const z of [13, 16, 19, 27.6]) { pr(B, 'hospital_bed', -17.3, y, z, { ry: BX }); P(B, 'bedhead', -16.15, y, z, { ry: BX }); }
+  for (const z of [14, 17, 27.6]) { pr(B, 'hospital_bed', -30.7, y, z, { ry: FX, monitor: false }); P(B, 'bedhead', -31.85, y, z, { ry: FX }); }
+  P(B, 'counter', -24, y, 22.5, { ry: FX, len: 3 }); P(B, 'ivstand', -21, y, 14.5, {}); pr(B, 'medical_cart', -26.5, y, 12, { ry: 0, variant: 'red' });
+  fixtures(B, -32, 11, -16, 30, C, { dx: 4, dz: 3.8, kind: 'strip', on: .35 });
+  // back corridor, sterile store, staff room
+  for (const x of [-46.8, -45.6, -40, -38.8, -35, -33.8]) pr(B, 'shelf_unit', x, y, 39.55, { ry: SZ, variant: 'grey' });
+  P(B, 'cage', -43, y, 35, { ry: .3 });
+  pr(B, 'kitchen_counter', -23, y, 39.6, { ry: SZ, len: 3.6, variant: 'white' }); pr(B, 'dining_table', -24, y, 36.5, { variant: 'white', chairs: 4 });
+  pr(B, 'sofa', -17, y, 37, { ry: BX, variant: 'teal', seats: 2 }); pr(B, 'fridge', -28.9, y, 39.4, { ry: SZ, variant: 'white' });
+  fixtures(B, -44.4, 30, -16, 34, C, { dx: 4, dz: 4, kind: 'strip', on: .3 });
+  fixtures(B, -48, 34, -16, 40, C, { dx: 4, dz: 6, on: .3 });
+  // gallery: benches and dead planters along the rail
+  P(B, 'seats', -15.6, y, -6, { n: 4, ry: FX }); P(B, 'planterdead', -15.4, y, 0, { len: 2, ry: FX });
+  P(B, 'seats', 3, y, 7.6, { n: 5, ry: SZ }); P(B, 'planterdead', 9, y, 7.5, { len: 2.4 });
+  // day room (west), first-floor lift lobby, staff office
+  pr(B, 'armchair', -14.5, y, 10, { ry: .5, variant: 'teal' }); pr(B, 'armchair', -12.5, y, 9.6, { ry: -.2, variant: 'mustard' });
+  pr(B, 'coffee_table', -13.2, y, 11.6, {}); pr(B, 'tv', -9, y, 21.4, { ry: SZ }); pr(B, 'dining_table', -10, y, 16, { variant: 'set', chairs: 4 });
+  pr(B, 'sofa', -6, y, 9.3, { variant: 'blue' });
+  P(B, 'lift', -3.85, y, 11.2, { ry: FX }); P(B, 'lift', -3.85, y, 19, { ry: FX });
+  pr(B, 'desk', 13, y, 20.5, { ry: SZ, variant: 'office' }); pr(B, 'office_chair', 13, y, 19.7, {}); pr(B, 'filing_cabinet', 15.55, y, 14, { ry: BX });
+  pr(B, 'bookshelf', 15.7, y, 16.5, { ry: BX, variant: 'metal' });
+  fixtures(B, -16, 8, 16, 22, C, { dx: 4, dz: 3.5, on: .3 });
+  // ward corridor + bays
+  pr(B, 'medical_cart', -13, y, 22.5, { ry: 0, variant: 'blue' }); P(B, 'cage', 6, y, 22.6, { ry: 0 }); P(B, 'wheelchair', 15, y, 25.2, { ry: SZ });
+  fixtures(B, -16, 22, 16, 26, C, { dx: 4, dz: 4, kind: 'strip', on: .4 });
+  for (const [cx, offs] of [[-10.67, [-3.2, 0, 3.2]], [0, [-3.2, 0, 3.2]], [10.67, [-3.2, 0]]]) {
+    for (const o of offs) {
+      pr(B, 'hospital_bed', cx + o, y, 38.7, { ry: SZ, monitor: false });
+      P(B, 'bedside', cx + o + 1.1, y, 39.4, {});
+      P(B, 'curtainbay', cx + o, y, 38.55, { ry: SZ, w: 3.0, d: 2.6, ceil: 2.95, fab: o === 0 ? 'p_fab_blue' : 'p_fab_teal' });
+    }
+    pr(B, 'hospital_bed', cx - 4.1, y, 30, { ry: FX, monitor: false });
+    fixtures(B, cx - 5.33, 26, cx + 5.33, 40, C, { dx: 3.5, dz: 4.5, on: .25 });
+  }
+}
+
+function dressBasement(B) {
+  const y = FB, C = -1;
+  // MORTUARY (team 2 lobby): fridge banks, post-mortem table, trolleys
+  P(B, 'fridge3', -5, y, 38.95, { ry: SZ }); P(B, 'fridge3', -2.25, y, 38.95, { ry: SZ });
+  P(B, 'pmtable', -10.8, y, 36.5); P(B, 'trolley', 3.2, y, 31, { ry: FX });
+  P(B, 'sharps', -11.8, y + 1.1, 31.5, { ry: FX }); P(B, 'gel', 3.85, y, 34, { ry: BX });
+  fixtures(B, -12, 30, 4, 40, C, { dx: 4, dz: 3.5, kind: 'strip', on: .55 });
+  // corridors: ducts and cable trays under the ceiling, parked trolleys
+  run(B, -46, 28.9, -12.2, 28.9, C - .45, .6, .35); run(B, -46, 27.0, -12.2, 27.0, C - .2, .35, .06, 'p_paint_darkgrey');
+  run(B, 4.2, 21.1, 46, 21.1, C - .45, .6, .35); run(B, 4.2, 23, 46, 23, C - .2, .35, .06, 'p_paint_darkgrey');
+  run(B, 2.9, 8.2, 2.9, 20, C - .45, .5, .3);
+  pr(B, 'gurney', -20, y, 26.5, { ry: FX }); P(B, 'cage', -44, y, 29.4, { ry: SZ }); P(B, 'cage', 30, y, 20.5, {}); pr(B, 'gurney', 14, y, 20.6, { ry: FX });
+  pr(B, 'trash_bag', -36, y, 26.4, { n: 3 }); pr(B, 'trash_bag', 40, y, 23.6, { n: 3 });
+  fixtures(B, -48, 26, -12, 30, C, { dx: 4.5, dz: 4, kind: 'strip', on: .3 });
+  fixtures(B, -12, 20, 4, 30, C, { dx: 4, dz: 5, kind: 'strip', on: .4 });
+  fixtures(B, 4, 20, 48, 24, C, { dx: 4.5, dz: 4, kind: 'strip', on: .3 });
+  fixtures(B, 0, 8, 4, 20, C, { dx: 4, dz: 4, kind: 'strip', on: .4 });
+  // plant room: boilers, generator, pipes
+  P(B, 'boiler', -22, y, 36.6, { ry: SZ }); P(B, 'boiler', -16.6, y, 36.6, { ry: SZ });
+  pr(B, 'generator', -33, y, 38.6, { ry: SZ, variant: 'green' });
+  pr(B, 'gas_cylinder', -13, y, 31, { rack: true, variant: 'oxygen' });
+  run(B, -35, 34.5, -13, 34.5, C - .5, .25, .25, 'p_coat_green'); run(B, -35, 33.8, -13, 33.8, C - .5, .25, .25, 'p_coat_red');
+  fixtures(B, -36, 30, -12, 40, C, { dx: 6, dz: 5, kind: 'strip', on: .3 });
+  // linen store
+  for (const [x, z] of [[-42.5, 32], [-41.5, 33.2], [-38, 37], [-39.2, 38.6]]) P(B, 'cage', x, y, z, { ry: x });
+  fixtures(B, -44.4, 30, -36, 40, C, { dx: 4, dz: 5, kind: 'strip', on: .2 });
+  // cold store + bulk store
+  for (const x of [5, 6.2, 7.4, 12.5, 13.7, 14.9]) pr(B, 'shelf_unit', x, y, 39.55, { ry: SZ, variant: 'dark' });
+  pr(B, 'cardboard_box', 8, y, 30, { variant: 'pile', n: 6 }); pr(B, 'drum', 14.5, y, 26, { n: 2, variant: 'blue' });
+  fixtures(B, 4, 24, 16, 40, C, { dx: 4, dz: 5, kind: 'strip', on: .3 });
+  pr(B, 'rack', 22, y, 38.65, { ry: SZ, bays: 2, levels: 2, lh: 1.2, load: .7 }); pr(B, 'rack', 36, y, 38.65, { ry: SZ, bays: 2, levels: 2, lh: 1.2, load: .5 });
+  pr(B, 'pallet', 20, y, 28, { variant: 'boxes', h: 1.0 }); pr(B, 'pallet', 40.5, y, 27.5, { variant: 'wrap' }); pr(B, 'forklift', 25, y, 30, { ry: 1.2, variant: 'yellow' });
+  pr(B, 'ibc_tank', 36, y, 27, {});
+  fixtures(B, 16, 24, 44.4, 40, C, { dx: 5, dz: 5, kind: 'strip', on: .3 });
+}
+
+function dressGarage(B) {
+  const y = 0;
+  P(B, 'ambulance', -6, y, -77.2, {}); P(B, 'ambulance', 6, y, -77.2, { door: true });
+  for (const x of [-11.2, -10]) pr(B, 'shelf_unit', x, y, -83.6, { variant: 'grey' });
+  pr(B, 'lockers', 9.6, y, -83.55, { n: 6, variant: 'green' }); pr(B, 'gurney', -3.8, y, -83, { ry: FX });
+  pr(B, 'medical_cart', 3.2, y, -83.3, { variant: 'red' });
+  for (const x of [-7.5, 0, 7.5]) pr(B, 'light_fixture', x, 5.6, -80.5, { variant: 'strip', on: true });
+  for (const x of [-7.5, 7.5]) pr(B, 'light_fixture', x, 5.6, -73.5, { variant: 'strip', on: x < 0 });
+  pr(B, 'whiteboard', -6, 1.0, -83.84, { w: 2.4 }); pr(B, 'wall_clock', 0, 3.2, -83.84, {});
+}
+
+function dressOutside(B) {
+  // visitor car park: rows of abandoned cars
+  const carRow = (z, ry, xs) => xs.forEach((x, i) => pr(B, 'car', x, 0, z, { ry, state: (i * 7 + Math.round(z)) % 9 === 0 ? 'wreck' : 'ok', variant: ['sedan', 'hatch', 'suv', 'sedan', 'van'][(i + Math.round(x)) % 5] }));
+  carRow(-22.5, SZ, [12, 15, 21, 27, 33, 39, 45]);
+  carRow(-35.5, SZ, [12, 18, 24, 33, 36]);
+  carRow(-41, 0, [12, 18, 21, 27, 33, 45]);
+  for (const x of [10, 13.5, 17, 20.5, 24, 27.5, 31, 34.5, 38, 41.5, 45]) for (const z of [-25.4, -38.2]) B.box(x - 1.5, .005, z, .1, .004, 5, { mat: 'paint_white', collide: false, cast: false });
+  // ED ambulance bay
+  P(B, 'ambulance', -40.5, 0, -27, { ry: SZ }); pr(B, 'car', -30.5, 0, -44, { ry: .3, variant: 'police', state: 'wreck' });
+  pr(B, 'jersey_barrier', -36, 0, -50.5, { ry: 0 }); pr(B, 'jersey_barrier', -32.5, 0, -50.6, { ry: .1 });
+  // lawn: trees and shrubs
+  for (const [x, z, v] of [[-24, -30, 'oak'], [-12, -45, 'birch'], [-25, -47, 'dead'], [-11, -24, 'oak']]) pr(B, 'tree', x, .1, z, { variant: v });
+  for (const [x, z] of [[-22, -40], [-20.5, -41.2], [-15, -18], [-26.5, -18.5], [-13, -33]]) pr(B, 'bush', x, .1, z, { variant: 'shrub' });
+  pr(B, 'grass_tall', -18, .1, -26, { variant: 'dry', w: 4, d: 3, h: .7 });
+  // forecourt furniture
+  for (const x of [-7, -3.5, 3.5, 7]) pr(B, 'bollard', x, .12, -22, { variant: 'concrete' });
+  pr(B, 'bench', -5, .12, -30, { variant: 'metal' }); pr(B, 'bench', 5, .12, -30, { variant: 'metal' }); pr(B, 'litter_bin', 0, .12, -30, {});
+  P(B, 'planterdead', -4, .12, -40, { len: 3 }); P(B, 'planterdead', 4, .12, -40, { len: 3 });
+  for (const [x, z] of [[-26, -53], [-6, -53], [14, -53], [34, -53]]) pr(B, 'street_light', x, 0, z, { ry: SZ, on: x !== 14 });
+  pr(B, 'bus_shelter', -18, .12, -51.2, { ry: SZ });
+  pr(B, 'road_sign', 9, 0, -53.2, { variant: 'noentry', ry: SZ });
+  // service yard
+  P(B, 'lox', 57.5, 0, 9); pr(B, 'fence_chainlink', 57.5, 0, 6.3, { len: 6 }); pr(B, 'fence_chainlink', 54.4, 0, 9.2, { len: 6, ry: FX });
+  P(B, 'skip', 53, 0, -3);
+  pr(B, 'dumpster', 60.4, 0, 24, { ry: BX, variant: 'green' }); pr(B, 'dumpster', 60.4, 0, 21.6, { ry: BX, variant: 'blue', lid: 'open' });
+  pr(B, 'generator', 58.6, 0, -30, { ry: BX, variant: 'trailer' });
+  for (const [x, z] of [[50.5, 14], [51.5, 23.2]]) pr(B, 'pallet', x, 0, z, { variant: 'boxes', stack: 2, h: .8 });
+  for (const z of [28, 28.8, 29.6]) pr(B, 'wheelie_bin', 60.8, 0, z, { ry: BX, variant: 'grey' });
+  pr(B, 'trash_bag', 59, 0, 26.5, { n: 7 }); pr(B, 'cone', 51, 0, 18, {}); pr(B, 'cone', 51.2, 0, 19.8, {});
+  pr(B, 'box_truck', 59.4, 0, -12, { ry: SZ, variant: 'plain', color: 'white' });
+  // ring road: litter and a broken-down van
+  pr(B, 'car', 30, 0, -58, { ry: BX, variant: 'van', state: 'wreck' }); pr(B, 'cone', 26.5, 0, -57.5, { variant: 'drum' });
+  for (const [x, z] of [[-30, -16.5], [20, -16.2], [44, -16.5], [-46, -40]]) pr(B, 'trash_bag', x, .12, z, { n: 3 });
+  for (const x of [-20, 20, 40]) pr(B, 'manhole', x, 0, -58, {});
+}
+
+function signage(B) {
+  const S = (slot, x, y, z, w, h, f, o) => sign(B, slot, x, y, z, w, h, f, o);
+  // ground floor
+  S('directory', -15.8, 1.6, -3, 1.0, 1.25, 'e'); S('reception', -27.5, 2.55, -.17, 1.6, .3, 's');
+  S('majors', -32.17, 2.5, 11, 1.4, .26, 'w'); S('xray', -35.83, 2.5, 13.5, 1.4, .3, 'e'); S('radiation', -36.2, 1.6, 12.2, .3, .3, 'w');
+  S('lifts', -1, 2.7, 7.83, 1.2, .3, 's'); S('stairs', 4.17, 2.6, 13.4, 1.2, .3, 'e');
+  S('chapel', -9, 2.5, 25.83, 1.4, .26, 's'); S('records', 8, 2.5, 25.83, 1.4, .26, 's');
+  S('opd', 16.2, 2.6, -2, 1.6, .35, 'w'); S('pharmacy', 25.83, 2.45, 11, 2.4, .6, 'w');
+  S('lockers', 20.2, 2.4, 35, 1.0, .25, 'w'); S('stores', 40.2, 2.5, 15, 1.0, .25, 'w');
+  S('exit', -34, 2.75, -13.83, .8, .33, 'n', { glow: true }); S('exit', 0, 2.75, -13.6, .8, .33, 'n', { glow: true }); S('exit', 30, 2.75, -13.83, .8, .33, 'n', { glow: true });
+  S('exit', -36.17, 2.7, 33, .8, .33, 'w', { glow: true }); S('exit', 47.83, 2.95, 18.75, .8, .33, 'w', { glow: true });
+  S('lvl_g', -44.6, 1.6, 33, .4, .4, 'e'); S('lvl_g', 10.75, 1.6, 9.8, .4, .4, 'e');
+  S('notice', 15.83, 1.3, -10, .5, .7, 'w'); S('wash', -32.17, 1.3, 8.5, .45, .63, 'w'); S('notice', -36.17, 1.3, 5, .45, .63, 'w');
+  // site letters (spray paint)
+  S('dir_b', 26.17, 1.2, 21, 1.0, 1.0, 'w'); S('dir_b', 39.83, 1.5, 20, 1.0, 1.0, 'w', { off: -.33 });
+  // first floor
+  S('theatres', -32, F1 + 2.55, 10.83, 1.6, .35, 's'); S('in_use', -40, F1 + 2.4, 16.17, .9, .3, 'n'); S('recovery', -24, F1 + 2.75, 11.17, 1.4, .26, 'n');
+  S('ward7', 0, F1 + 2.6, 26.17, 1.6, .35, 'n'); S('bay_1', -10.67, F1 + 2.35, 26.17, .7, .26, 'n'); S('bay_2', 0, F1 + 2.35, 26.17, .7, .26, 'n'); S('bay_3', 10.67, F1 + 2.35, 26.17, .7, .26, 'n');
+  S('lvl_1', -44.6, F1 + 1.6, 33, .4, .4, 'e'); S('lvl_1', 10.75, F1 + 1.6, 9.8, .4, .4, 'e');
+  S('dir_a', -32.17, F1 + 1.3, 26, 1.0, 1.0, 'w'); S('dir_a', -38, F1 + 1.3, 30.17, 1.0, 1.0, 'n'); S('dir_a', -40, F1 + 1.3, 10.83, 1.0, 1.0, 's');
+  S('exit', -38, F1 + 2.8, 7.2, .8, .33, 'n', { glow: true }); S('exit', -16.2, F1 + 2.8, 32, .8, .33, 'e', { glow: true });
+  // basement
+  S('mortuary', -4, FB + 3.1, 29.83, 1.6, .35, 's'); S('plant', -30, FB + 2.55, 29.83, 1.0, .25, 's'); S('coldroom', 10, FB + 2.55, 24.17, 1.0, .25, 'n');
+  S('stores', 24, FB + 2.55, 24.17, 1.0, .25, 'n'); S('lvl_b1', -44.6, FB + 1.6, 33, .4, .4, 'e'); S('oxygen', -12.17, FB + 1.6, 33, .5, .33, 'w');
+  S('exit', -46.2, FB + 2.75, 29.83, .8, .33, 's', { glow: true }); S('exit', 46.2, FB + 2.75, 29.83, .8, .33, 's', { glow: true });
+  // grime: stains, leaks, cracks, tags, litter on the floors
+  const G = [['leak', -24, 1.8, -.17, .5, 2, 's'], ['mould', -47.83, 2.4, -6, 1.2, 1.2, 'e'], ['stain_0', -30, .5, -13.83, 1.4, 1.4, 'n'],
+    ['crack', 4.2, 2.2, -5, 2, .5, 'e'], ['tag_0', 15.83, 1.6, -11, 2.4, 1.2, 'w'], ['tag_1', -47.85, 1.4, 34, 2.4, 1.2, 'e'],
+    ['mould', -11.83, FB + 2.6, 38, 1.4, 1.4, 'e'], ['leak', -20, FB + 1.8, 29.83, .5, 2, 's'], ['stain_1', 20, FB + .6, 20.17, 1.6, 1.6, 'n'],
+    ['tag_2', 30, 1.6, -14.17, 2.4, 1.2, 's'], ['tag_0', -12.15, 1.6, -69.85, 2.6, 1.3, 'w'], ['scorch', 36, .9, 29.83, 1.4, 1.4, 's'],
+    ['stain_2', -16.17, F1 + 1, 18, 1.4, 1.4, 'w'], ['leak', -40, F1 + 1.8, 7.17, .5, 2, 'n'], ['crack', -24, F1 + 2.4, 29.83, 2, .5, 's']];
+  for (const g of G) S(...g);
+  const F = [['papers', -38, .02, -6, 2.4, 2.4], ['papers', 3, .02, 2.5, 2.4, 2.4], ['dirt', -6, .02, -11, 3, 3], ['papers', 32, .02, 14, 2.6, 2.6],
+    ['dirt', 22, .02, -10, 3, 3], ['papers', 8, .02, 34, 2.4, 2.4], ['dirt', -24, .02, 12, 3, 3], ['papers', -38, F1 + .02, 25.5, 2.4, 2.4],
+    ['dirt', -24, F1 + .02, 20, 3, 3], ['papers', 0, F1 + .02, 32, 2.4, 2.4], ['dirt', -4, FB + .02, 24, 3, 3], ['dirt', -30, FB + .02, 28, 3, 3],
+    ['leaves', 0, .14, -16, 3, 3], ['leaves', 30, .02, -12.5, 2.4, 2.4], ['leaves', -34, .02, -12, 2.6, 2.6], ['dirt', 0, .02, -66, 4, 4]];
+  for (const [s, x, yy, z, w, h] of F) S(s, x, yy, z, w, h, 'u', { ry: (x * 13 + z) % 6 });
 }

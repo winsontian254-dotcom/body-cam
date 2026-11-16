@@ -20,10 +20,10 @@ export const KIT_PARTS = [
   { key: 'shinL', hi: 'leg_l', lo: 'leg_l_lo', bone: 'shinL', anchor: [0, 0.22, 0], len: 0.41, s: [1, 1, 1], role: ROLE.BOTTOM },
   { key: 'footR', hi: 'foot', lo: 'foot_lo', bone: 'footR', anchor: [0, 0.038, -0.055], s: [1, 1, 1], role: ROLE.BOOT },
   { key: 'footL', hi: 'foot_L', lo: 'foot_L_lo', bone: 'footL', anchor: [0, 0.038, -0.055], s: [1, 1, 1], role: ROLE.BOOT },
-  { key: 'uarmR', hi: 'arm_u', lo: 'arm_u_lo', bone: 'uarmR', anchor: [0, 0.16, 0], len: 0.33, s: [0.95, 1, 0.95], role: ROLE.TOP },
-  { key: 'uarmL', hi: 'arm_u_L', lo: 'arm_u_L_lo', bone: 'uarmL', anchor: [0, 0.16, 0], len: 0.33, s: [0.95, 1, 0.95], role: ROLE.TOP },
-  { key: 'farmR', hi: 'arm_l', lo: 'arm_l_lo', bone: 'farmR', anchor: [0, 0.16, 0], len: 0.34, s: [0.95, 1, 0.95], role: ROLE.TOP },
-  { key: 'farmL', hi: 'arm_l_L', lo: 'arm_l_L_lo', bone: 'farmL', anchor: [0, 0.16, 0], len: 0.34, s: [0.95, 1, 0.95], role: ROLE.TOP },
+  { key: 'uarmR', hi: 'arm_u', lo: 'arm_u_lo', bone: 'uarmR', anchor: [0, 0.16, 0], len: 0.33, s: [0.9, 1, 0.9], role: ROLE.TOP },
+  { key: 'uarmL', hi: 'arm_u_L', lo: 'arm_u_L_lo', bone: 'uarmL', anchor: [0, 0.16, 0], len: 0.33, s: [0.9, 1, 0.9], role: ROLE.TOP },
+  { key: 'farmR', hi: 'arm_l', lo: 'arm_l_lo', bone: 'farmR', anchor: [0, 0.16, 0], len: 0.34, s: [0.84, 1, 0.84], role: ROLE.TOP },
+  { key: 'farmL', hi: 'arm_l_L', lo: 'arm_l_L_lo', bone: 'farmL', anchor: [0, 0.16, 0], len: 0.34, s: [0.84, 1, 0.84], role: ROLE.TOP },
 ];
 export const HEAD_ANCHOR = [0, 0.03, -0.012];      // the kit head's skull centre sits on the head frame origin (hitbox head centre)
 export const EYE_Y = 0.012;                        // eye line in head-bone space (y up from the skull centre)
@@ -263,9 +263,10 @@ export function buildGearSet(KD) {
         roleAt: (P) => {
           const [x, y, z] = P;
           const front = z > 0.035, eye = y > EYE_Y - 0.026 && y < EYE_Y + 0.024 && Math.abs(x) < 0.078 && z > 0.02;
-          if (face === 'bala') return eye && front ? ROLE.SKIN : ROLE.MASK;
+          void eye; void front;
+          if (face === 'bala') return ROLE.MASK;            // full balaclava: the eyewear covers the eye line (no jagged skin slot)
           // gaiter: mask over the nose, mouth and neck; skin around the eyes and forehead; a buzz cut on the skull
-          if (y < EYE_Y - 0.03) return ROLE.MASK;
+          if (y < EYE_Y - 0.022) return ROLE.MASK;          // the gaiter's top edge tucks under the eyewear
           if (y > EYE_Y + 0.045 || (z < 0.02 && y > EYE_Y - 0.035)) return z > 0.055 && y < EYE_Y + 0.07 ? ROLE.SKIN : ROLE.HAIR;
           return ROLE.SKIN;
         },

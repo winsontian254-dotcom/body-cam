@@ -81,8 +81,13 @@ js/modes/index.js          MODES registry (all 26 ids, `available` flag) + loadM
 js/modes/<id>.js           one file per game mode (export default ModeDef); js/modes/common.js = shared helpers (bombMode base...)
 js/bots/bot.js             bot brain (states, objectives, hiding, grenades), produces commands
 js/bots/aim.js             human-like aim (reaction, tracking error, recoil control) by difficulty
-js/chars/human.js          third-person character (Neon Veins human kit + tactical gear, team colours)
-js/chars/anim.js           procedural animation (idle/walk/run/crouch/jump/aim/reload/death)
+js/chars/human.js          third-person characters: the 'bodies' system (game.js registers createCharacters via setBodyFactory), §4b
+js/chars/anim.js           procedural animation (pure JS): gait shared with hitbox.js, aim / recoil / reload / throw / plant / knife / flinch
+js/chars/kit.js            human kit loading (assets/models/human_kit.glb + gloves), the one character material (LFChar plugin), Batch
+js/chars/gear.js           tactical gear built in code (plate carriers, helmets, NVG, headsets, masks, packs, holsters, pads), pure JS
+js/chars/looks.js          VANGUARD / SENTINEL / contractor kits (6 variants each), lookFor(p), paletteOf(look)
+js/chars/ragdoll.js        Verlet ragdoll on the anim.js joints, collides with js/phys (pure JS)
+js/chars/debug.js          hitbox overlay (#dev&hitboxes)       js/chars/tags.js   team-mate name tags (DOM in #hud)
 js/net/peer.js             PeerJS wrapper (host/join, reliable + unreliable channels, ping)
 js/net/browser.js          public server browser (well-known peer ids) + private join codes
 js/net/netgame.js          host broadcast / client apply: snapshots, interpolation, events, hit claims
@@ -328,8 +333,27 @@ Combat (combat.js): `SURF_RES` pen points per metre (glass .6, wood 2.2, plaster
 costs .6, at most 2 victims / 4 walls per bullet; shotguns: one cone offset per trigger pull, pellets spread by `spread.pellet`.
 Hitboxes (hitbox.js): 15 capsules (head sphere, neck, chest, stomach, pelvis = stomach group, upper / fore arms, thighs, shins, feet)
 in a rifle-carry pose; crouch lowers the upper body .52 m, lean shears the upper body so the eye lands on move.js leanOffset.
+Legs follow the gait (player.js `updateGait` stores `gait gaitK gaitS gaitSt gaitH gaitDir` from `hitbox.gaitParams(speed, crouch, out,
+side)`): ankles on the stance / swing curve `gaitFoot`, knees by two-bone IK, a pelvis drop for long reaches, hips twisted toward a
+diagonal motion (`gaitTwist`). js/chars/anim.js draws the legs from the SAME numbers, so the drawn legs sit on the leg capsules
+(tools/test/chars.mjs checks < 4.5 cm and planted feet that do not slide). Remote players on a net client are not simulated: the net
+layer should call `updateGait(p, dt)` for them (from their interpolated velocity) so client-side leg hits match what is drawn.
 Authority: `local` (practice/offline, everything simulated here), `host` (same, plus net broadcast), `client`
 (own movement predicted locally and sent to the host; hits detected locally and sent as claims; host validates).
+
+### 4b. Characters (js/chars) — the 'bodies' system
+`createCharacters(scene, game)` -> `Characters` (system name 'bodies'; falls back to js/game/bodies.js placeholders if the kit cannot
+load). Contract used by the game: `ready` (Promise, awaited by game.js), `add(p)`, `remove(p)`, `muzzleOf(p, out) -> out | null`
+(third-person muzzle, effects.js), `casters()` (thin-instance hosts for the sun shadow), `frame(dt, alpha)`, `late(dt)` (name tags),
+`dispose()`; plus `stats()`, `poseOf(p)`, `setLook(p, team, variant, skin)` (line-ups), `showHitboxes(on)`, `timeScale` (0 freezes the
+animation), `debug.cam = { pos, target, fov }` (a free camera for tests), `thirdPersonOverride`. World weapon drops (`game.drops`) are
+drawn here too. Every body part / gear piece is a thin instance of a per-scene host mesh with ONE PBR material (palette row per look,
+per-vertex material role, procedural camo, team-coloured rim on friendlies): ~80 batches whatever the player count. The local player in
+first person and the spectated player are drawn only into the shadow map. Deaths become ragdolls (stay for the round; `round:reset`
+clears them; 25 s in respawn modes). Events read: 'shot' (recoil, 3rd-person muzzle flash), 'hit' (flinch, ragdoll impulse), 'land',
+'jump', 'reload', 'grenade:throw', 'melee', 'kill', 'round:reset'. PlayerState read: pos/prev/vel/yaw/pitch/crouch/lean/onGround/
+mantle/alive/team/helmet/inv/cur/curNade/ws (state, ads, rl, ml, nadeT, btn)/busy ('plant'|'defuse'|'pickup': kneel)/gait*. Dev: `#dev&hitboxes`.
+Test: `node tools/test/chars.mjs [--only=gait,lineup,strips,poses,ragdoll,perf,view]`.
 
 ### Teams and friendly fire
 Friendly fire is DISABLED in every mode: `game.damage()` ignores any damage, flash, stun, fire or gas whose
@@ -966,6 +990,8 @@ that everything loads and estimates GPU memory per tier.
 * A change is not done until it boots with ZERO console errors (`node tools/test/smoke.mjs`).
 * `node tools/test/props.mjs [--only=a,b] [--q=low] [--noshots] [--doc]`: builds the prop_gallery dev map, checks every prop kit and writes a
   screenshot per type to tools/test/out/props/; `--doc` regenerates docs/PROPS.md.
+* `node tools/test/chars.mjs [--only=...]`: characters (gait vs hitboxes in Node, line-ups, animation strips, poses + hitbox overlay,
+  ragdolls on stairs / walls, 16-character perf, name tags / muzzle flash). Screenshots `chars-*.png`.
 * `node tools/test/phys.mjs` (Node, no browser): World / ray / move / navgrid unit tests + timings.
 * `node tools/test/smoke.mjs`: title boot + the dev sandbox on dev_range (gates, stairs, mantle, hill) + screenshots. Its
   `openPage(browser, base, hash)` export serves the pinned Babylon scripts from tools/test/out/cache (fetched once).

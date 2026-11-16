@@ -18,10 +18,10 @@ export function hashStr(s) { let h = 0x811c9dc5; s = String(s); for (let i = 0; 
 // camo colour sets (sRGB hex): base, layer 1, layer 2, layer 3
 const CAMO = {
   // VANGUARD: an original soft multi-tone pattern (tan base, khaki, brown and olive blobs)
-  vgMulti: { kind: 1, c: ['#a08a64', '#c4b28a', '#6b5236', '#6f6b44'] },
-  vgArid: { kind: 1, c: ['#b6a17c', '#cdbd99', '#93795a', '#a3976c'] },
-  coyote: { kind: 0, c: ['#7c6a4d', '#7c6a4d', '#7c6a4d', '#7c6a4d'] },
-  tan: { kind: 0, c: ['#a8946f', '#a8946f', '#a8946f', '#a8946f'] },
+  vgMulti: { kind: 1, c: ['#8a7757', '#a8956f', '#5a432c', '#5f5c3b'] },
+  vgArid: { kind: 1, c: ['#9b8764', '#b3a07c', '#76603f', '#857b55'] },
+  coyote: { kind: 0, c: ['#6f5a3e', '#6f5a3e', '#6f5a3e', '#6f5a3e'] },
+  tan: { kind: 0, c: ['#8f7a58', '#8f7a58', '#8f7a58', '#8f7a58'] },
   ranger: { kind: 0, c: ['#4f5543', '#4f5543', '#4f5543', '#4f5543'] },
   // SENTINEL: navy / black / urban greys, an original digital urban pattern
   navy: { kind: 0, c: ['#252b3b', '#252b3b', '#252b3b', '#252b3b'] },

@@ -263,11 +263,13 @@ export function accountScreen(tab0) {
     body.querySelector('.ac-add').append(inp, UI.button('SEND', send, 'primary'));
     body.querySelector('.ac-refresh').onclick = () => { sfx('click'); load(); };
     const hostCode = () => Account.status().code;
+    let loadSeq = 0;                                   // only the newest load() renders: an older reply must not overwrite a newer list
     async function load() {
+      const seq = ++loadSeq;
       let j;
       try { j = await Account.friends({ force: true }); }
-      catch (e) { if (list.isConnected) list.innerHTML = '<div class="ac-empty bad">' + esc(e.message) + '</div>'; return; }
-      if (!list.isConnected) return;
+      catch (e) { if (seq === loadSeq && list.isConnected) list.innerHTML = '<div class="ac-empty bad">' + esc(e.message) + '</div>'; return; }
+      if (seq !== loadSeq || !list.isConnected) return;
       const on = j.friends.filter(f => f.online).length;
       count.textContent = j.friends.length ? on + ' / ' + j.friends.length + ' ONLINE' : '';
       list.innerHTML = '';
@@ -306,13 +308,15 @@ export function accountScreen(tab0) {
     body.innerHTML = '<div class="ac-card ac-bcard"><div class="ac-bctl"></div><div class="ac-btitle"></div><div class="ac-btable"><div class="ac-empty">Loading…</div></div><div class="ac-bme"></div></div>';
     const ctl = body.querySelector('.ac-bctl'), table = body.querySelector('.ac-btable'), title = body.querySelector('.ac-btitle'), me = body.querySelector('.ac-bme');
     ctl.append(UI.seg(modes, bMode, v => { bMode = v; load(); }), UI.seg([{ id: 'month', label: 'THIS MONTH' }, { id: 'all', label: 'ALL TIME' }], bPeriod, v => { bPeriod = v; load(); }));
+    let loadSeq = 0;                                   // switching mode / period quickly: only the newest reply renders
     async function load() {
+      const seq = ++loadSeq;
       const board = 'lf:' + bMode + ':' + (bPeriod === 'month' ? monthKey() : 'all');
       const mName = bMode === 'xp' ? 'EXPERIENCE' : ((MODES.find(m => m.id === bMode) || {}).name || bMode).toUpperCase();
       title.innerHTML = '<b>' + esc(mName) + '</b><span>' + (bPeriod === 'month' ? 'THIS MONTH (UTC) · ' + monthKey() : 'ALL TIME') + ' · ' + (bMode === 'xp' ? 'XP EARNED' : 'BEST MATCH SCORE') + '</span>';
       table.innerHTML = '<div class="ac-empty">Loading…</div>'; me.textContent = '';
       const j = await Account.getBoard(board);
-      if (!table.isConnected) return;
+      if (seq !== loadSeq || !table.isConnected) return;
       if (j.error) { table.innerHTML = '<div class="ac-empty' + (j.error === Account.NO_BOARDS ? ' nb' : ' bad') + '">' + esc(j.error) + (j.error === Account.NO_BOARDS ? '<small>Your scores are kept on this device; the boards fill in once the server is updated.</small>' : '') + '</div>'; return; }
       if (!j.top || !j.top.length) { table.innerHTML = '<div class="ac-empty">No scores yet — finish a match to post the first one.</div>'; return; }
       table.innerHTML = '<div class="ac-br hd"><span>#</span><span>OPERATOR</span><span>' + (bMode === 'xp' ? 'LEVEL' : 'K / D / A') + '</span><span>SCORE</span></div>'

@@ -52,7 +52,8 @@ export class ModeHud {
       bus.on('match:point', e => { const m = me(); this.alert(e.team === 3 ? 'MATCH POINT · BOTH TEAMS' : 'MATCH POINT · ' + game.match.teamName(e.team), m && (e.team === m.team || e.team === 3) ? 'win' : 'lose', 4); }),
       bus.on('overtime', e => this.alert('OVERTIME ' + e.n, '', 5)),
       bus.on('halftime', e => { if (e.kind === 'ot') this.note('OVERTIME · $' + (game.match.limit.ot ? game.match.limit.ot.money : 10000) + ' FOR EVERYONE', 'obj', 5); }),
-      bus.on('round:start', () => { const m = game.match, md = game.mode; if (m.rounds && md.teams === 2 && md.halftime !== false && !md.swapEveryRound && !m.ot && m.half === 1 && m.roundsPlayed === Math.floor(m.limit.rounds / 2) - 1) this.note('LAST ROUND OF THE FIRST HALF', '', 3.5); }),
+      bus.on('round:freeze', () => this.clearRound()),
+      bus.on('round:start', () => { this.mvpT = 0; this.$.mvp.classList.remove('on'); const m = game.match, md = game.mode; if (m.rounds && md.teams === 2 && md.halftime !== false && !md.swapEveryRound && !m.ot && m.half === 1 && m.roundsPlayed === Math.floor(m.limit.rounds / 2) - 1) this.note('LAST ROUND OF THE FIRST HALF', '', 3.5); }),
       bus.on('team:balance', e => { if (e.p === me()) this.alert('MOVED TO ' + game.match.teamName(e.to), '', 4); }),
     ];
   }
@@ -63,6 +64,8 @@ export class ModeHud {
     this.$.notes.prepend(n); this.notesL.unshift({ el: n, t: secs });
     while (this.notesL.length > 3) this.notesL.pop().el.remove();
   }
+  /** a new round: the last round's notices and MVP card go */
+  clearRound() { for (const n of this.notesL) n.el.remove(); this.notesL.length = 0; this.mvpT = 0; this.$.mvp.classList.remove('on'); }
   alert(text, tone, secs = 3) { this.$.alert.textContent = text; this.$.alert.dataset.tone = tone || ''; this.$.alert.classList.add('on'); this.alertT = secs; }
   cash(delta, why) {
     const n = h('div', 'mh-delta ' + (delta > 0 ? 'up' : 'down'), (delta > 0 ? '+' : '−') + money(Math.abs(delta)) + (why ? ' <span>' + esc(why) + '</span>' : ''));
@@ -211,6 +214,8 @@ export class ModeHud {
     dt = Math.min(dt, 0.1);
     this.slowT -= dt;
     if (this.slowT <= 0) { this.slowT = 0.25; this.strip(); }
+    // the big round banner (hud.js) owns the centre: notices step aside while it shows
+    this.cls('msgOn', this.el, 'msg', !!(this.hud.$ && this.hud.$.msg && this.hud.$.msg.classList.contains('on')));
     this.markers();
     // progress bar
     const pr = O.progress(me);

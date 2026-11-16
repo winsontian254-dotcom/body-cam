@@ -131,10 +131,10 @@ async function main() {
           const part = all.slice(c, c + per);
           const x0 = Math.min(...part.map(g => g.x - Math.max(g.w, 1) / 2)), x1 = Math.max(...part.map(g => g.x + Math.max(g.w, 1) / 2));
           const h = Math.max(...part.map(g => g.h)), d = Math.max(...part.map(g => g.d)), z = part[0].z;
-          const fov = .8, pitch = h > 8 ? .22 : .36, yaw = Math.PI - .32;
+          const hang = type === 'light_fixture', fov = .8, pitch = hang ? -.12 : h > 8 ? .22 : .36, yaw = Math.PI - .32;
           const hf = 2 * Math.atan(Math.tan(fov / 2) * W / H), fit = Math.max(x1 - x0 + .4, h * 1.5 * W / H, 1.6);
           const dist = fit / 2 / Math.tan(hf / 2) + d / 2;
-          const tx = (x0 + x1) / 2, ty = h * .45, tz = z;
+          const tx = (x0 + x1) / 2, ty = hang ? 2.55 : h * .45, tz = z;
           const fx = Math.sin(yaw) * Math.cos(pitch), fy = -Math.sin(pitch), fz = Math.cos(yaw) * Math.cos(pitch);
           const cam = { x: tx - fx * dist, y: Math.max(.6, ty - fy * dist), z: tz - fz * dist, yaw, pitch, fov };
           // a short far plane culls the rest of the gallery (SwiftShader renders every triangle in view)

@@ -9,11 +9,13 @@
      raycastPlayer(p, ox, oy, oz, dx, dy, dz, maxDist, stamp, out?) -> out { t, shape, group, x, y, z } | null
                          nearest shape the ray enters within maxDist (dir normalised); broad phase first
      rayCapsule(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, r) -> t | -1
+     gaitParams(speed, crouch, out?, side?) -> { step, st, sweep, lift }  (side = |sin| of the motion direction off the facing)   step geometry shared with player.js updateGait and chars/anim.js
      aimPoint(p, part, out)    world point of 'head' | 'chest' | 'stomach' | 'pelvis' (bots, LOS checks)
    Pose model (feet at pos, facing +Z at yaw 0, x = right): a rifle-carry pose; pitch turns the arms about the shoulder line and
    nods the head; crouch lowers the upper body .52 m (eye 1.64 -> 1.12, like phys/move.js), folds the thighs forward and keeps the
    feet; lean rolls everything above the pelvis about the pelvis so the eye lands on phys/move.js leanOffset (.36 m sideways);
-   gait (phase, advanced by game.js from the horizontal speed) swings the legs, so legs are hit where they are drawn. */
+   gait (phase, stride, direction: player.js updateGait from the horizontal speed) moves the ankles along the same stance / swing
+   curve as the drawn legs (gaitParams), so legs are hit where they are drawn. */
 
 export const SHAPES = [
   { name: 'head', group: 'head' }, { name: 'neck', group: 'neck' }, { name: 'chest', group: 'chest' }, { name: 'stomach', group: 'stomach' },
@@ -54,6 +56,33 @@ const DEFI = DEF.map(([a, dxa, b, dxb, r]) => [IDX[a], dxa, IDX[b], dxb, r]);
 const LEGS = [[IDX.hipR * 3, IDX.knR * 3, IDX.anR * 3, IDX.toR * 3, 0], [IDX.hipL * 3, IDX.knL * 3, IDX.anL * 3, IDX.toL * 3, Math.PI]];
 
 const L = new Float32Array(NAMES.length * 3);   // local joints scratch
+const TAU = Math.PI * 2;
+/** gait cycle position 0..1 of a leg: the phase is offset so u = 0 is the foot planting at the front (phase - PI/2) */
+const gaitU = ph => { const u = ((ph - Math.PI / 2) / TAU) % 1; return u < 0 ? u + 1 : u; };
+const GF = [0, 0], GT = new Float32Array(8);
+/** hip twist (rad, about +y like yaw) toward a diagonal motion direction dir (relative to the facing) */
+export function gaitTwist(dir, crouch, k) { return 0.42 * Math.sin(2 * dir) * (1 - 0.4 * (crouch || 0)) * (k || 0); }
+/** foot offset of one leg at gait phase ph: out[0] = along the motion (m, + = ahead of the hip), out[1] = lift (m).
+    Stance (u < st): the planted foot travels from +.45 sweep to -.55 sweep; swing: back to the front, lifted. */
+export function gaitFoot(ph, sweep, st, lift, out = [0, 0]) {
+  const u = gaitU(ph);
+  if (u < st) { const h = Math.min(1, Math.max(0, (u / st - 0.6) / 0.4)); out[0] = sweep * (0.45 - u / st); out[1] = Math.min(0.06, sweep * 0.09) * h * h * (3 - 2 * h); }   // heel rise before toe-off
+  else { const q = (u - st) / (1 - st), e = q * q * (3 - 2 * q), r = Math.min(1, q / 0.35); out[0] = sweep * (-0.55 + e); out[1] = Math.max(lift * Math.pow(Math.sin(Math.PI * q), 0.85), Math.min(0.06, sweep * 0.09) * (1 - r * r * (3 - 2 * r))); }
+  return out;
+}
+/** Step geometry for a horizontal speed and crouch amount, shared by the simulation (player.js updateGait), the hitbox legs and
+    the drawn legs (js/chars/anim.js) so they agree. out = { step (m per step = half a cycle), st (stance fraction of the cycle),
+    sweep (m the planted foot travels backwards = 2 * step * st: no sliding), lift (swing height, m) } */
+export function gaitParams(speed, crouch, out = { step: 1, st: 0.55, sweep: 0.8, lift: 0.1 }, side = 0) {
+  const sp = Math.max(0, speed || 0), c = Math.min(1, Math.max(0, crouch || 0)), sd = Math.min(1, Math.abs(side || 0));
+  const run = Math.min(1, Math.max(0, (sp - 2.4) / 2.0)), rs = run * run * (3 - 2 * run);
+  const st = (0.56 - 0.28 * rs) * (1 - c) + 0.58 * c;                      // stance share: walk .56 -> run .28 (flight phase)
+  const nat = (0.42 + 0.19 * sp) * (1 - c) + (0.3 + 0.16 * sp) * c;         // natural step length for the speed
+  const cap = (0.72 * (1 - c) + 0.7 * c) * (1 - 0.3 * sd);                     // longest planted sweep the legs reach (shorter side steps)
+  out.sweep = Math.min(cap, 2 * nat * st); out.st = st; out.step = Math.max(0.25, out.sweep / (2 * st));
+  out.lift = (0.07 + 0.12 * rs) * (1 - c) + 0.06 * c;
+  return out;
+}
 const EYE_STAND = 1.64, EYE_CROUCH = 1.12, LEAN_DIST = 0.36, LEAN_DROP = 0.05;
 
 /** World-space shapes for a state-like object. */
@@ -75,29 +104,49 @@ export function poseShapes(s, out = new Float32Array(NSHAPE * STRIDE)) {
     for (let i = 0; i < NAMES.length; i++) {
       if (UPPER[i]) { L[i * 3 + 1] -= drop; L[i * 3 + 2] += 0.06 * c; }
       else if (HIP[i]) { L[i * 3 + 1] -= 0.42 * c; L[i * 3 + 2] -= 0.05 * c; }
-      else if (KNEE[i]) { L[i * 3 + 1] -= 0.05 * c; L[i * 3 + 2] += 0.30 * c; }
+      else if (KNEE[i]) { L[i * 3 + 1] -= 0.17 * c; L[i * 3 + 2] += 0.29 * c; }   // where a .40 / .40 leg bends (shin keeps its length)
     }
   }
-  // walk gait (s.gait = phase rad, s.gaitK = 0..1 amplitude): thighs swing about the hips, knees flex on the forward swing
+  // walk gait (s.gait = phase rad, s.gaitK = 0..1 amplitude, s.gaitS = stance sweep m, s.gaitSt = stance fraction, s.gaitH = lift m,
+  // s.gaitDir = motion direction relative to the facing): the ankles follow the same stance / swing curve as the drawn legs
+  // (js/chars/anim.js), knees by two-bone IK toward their crouch / rest bend, so legs are hit where they are drawn
   const gk = s.gaitK || 0;
   if (gk > 0.01) {
-    const ph = s.gait || 0;
-    for (const [hip, knee, ank, toe, off] of LEGS) {
-      // in this rotation a positive angle swings a limb BACKWARDS: thigh = -swing, shin = thigh + knee flex
-      const fi = ph + off, a = -0.42 * gk * Math.sin(fi), b = -0.62 * gk * Math.max(0, Math.sin(fi + 0.9));
-      const hy = L[hip + 1], hz = L[hip + 2];
-      // thigh: hip -> knee rotated by a (forward = +z)
-      let vy = L[knee + 1] - hy, vz = L[knee + 2] - hz;
-      const ca = Math.cos(a), sa = Math.sin(a);
-      const kny = hy + vy * ca - vz * sa, knz = hz + vy * sa + vz * ca;
-      // shin: knee -> ankle rotated by a - b (the knee bends backwards)
-      vy = L[ank + 1] - L[knee + 1]; vz = L[ank + 2] - L[knee + 2];
-      const c2 = Math.cos(a - b), s2 = Math.sin(a - b);
-      const any = kny + vy * c2 - vz * s2, anz = knz + vy * s2 + vz * c2;
-      vy = L[toe + 1] - L[ank + 1]; vz = L[toe + 2] - L[ank + 2];
-      const c3 = Math.cos((a - b) * 0.4), s3 = Math.sin((a - b) * 0.4);
-      L[toe + 1] = any + vy * c3 - vz * s3; L[toe + 2] = anz + vy * s3 + vz * c3;
-      L[knee + 1] = kny; L[knee + 2] = knz; L[ank + 1] = any; L[ank + 2] = anz;
+    const ph = s.gait || 0, sw = (s.gaitS != null ? s.gaitS : 0.8) * gk, st = s.gaitSt || 0.55, lift = (s.gaitH != null ? s.gaitH : 0.1) * gk;
+    // hips turn toward a diagonal motion (twist), the feet still travel along the motion direction
+    const dir = s.gaitDir || 0, tw = gaitTwist(dir, c, gk), mdx = Math.sin(dir - tw), mdz = Math.cos(dir - tw);
+    // ankle targets of both legs, then the pelvis drop that lets the longer reach land without overstretching
+    let drop = 0;
+    for (let k = 0; k < 2; k++) {
+      const [hip, knee, ank, , off] = LEGS[k];
+      gaitFoot(ph + off, sw, st, lift, GF);
+      const tx = L[ank] + mdx * GF[0] + (L[hip] > 0 ? 1 : -1) * 0.05 * Math.abs(mdx) * gk, ty = L[ank + 1] + GF[1], tz = L[ank + 2] + mdz * GF[0];
+      const LM = (Math.hypot(L[knee] - L[hip], L[knee + 1] - L[hip + 1], L[knee + 2] - L[hip + 2]) + Math.hypot(L[ank] - L[knee], L[ank + 1] - L[knee + 1], L[ank + 2] - L[knee + 2])) * 0.985;
+      const h2 = (tx - L[hip]) ** 2 + (tz - L[hip + 2]) ** 2;
+      drop = Math.max(drop, (L[hip + 1] - ty) - Math.sqrt(Math.max(0, LM * LM - h2)));
+      GT[k * 3] = tx; GT[k * 3 + 1] = ty; GT[k * 3 + 2] = tz; GT[6 + k] = LM;
+    }
+    drop = Math.min(0.1, Math.max(0, drop));
+    // the hips take the whole drop, the spine absorbs most of it (head / chest bob at most 4 cm: stable head hitbox)
+    if (drop > 0) { const du = Math.min(drop, 0.04); for (let i = 0; i < NAMES.length; i++) if (HIP[i]) L[i * 3 + 1] -= drop; else if (UPPER[i]) L[i * 3 + 1] -= du; }
+    for (let k = 0; k < 2; k++) {
+      const [hip, knee, ank, toe] = LEGS[k];
+      const hx = L[hip], hy = L[hip + 1], hz = L[hip + 2];
+      const l1 = Math.hypot(L[knee] - hx, L[knee + 1] - (hy + drop), L[knee + 2] - hz), l2 = Math.hypot(L[ank] - L[knee], L[ank + 1] - L[knee + 1], L[ank + 2] - L[knee + 2]);
+      const ox = L[toe] - L[ank], oy = L[toe + 1] - L[ank + 1], oz = L[toe + 2] - L[ank + 2];
+      let dx = GT[k * 3] - hx, dy = GT[k * 3 + 1] - hy, dz = GT[k * 3 + 2] - hz; let d = Math.hypot(dx, dy, dz) || 1e-6;
+      dx /= d; dy /= d; dz /= d; d = Math.min(d, (l1 + l2) * 0.999);
+      const ca = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - ca * ca));
+      // knee pole: forward (+z) and a little outward, perpendicular to the hip -> ankle line
+      let px = 0.08 * (hx > 0 ? 1 : -1), py = 0, pz = 1; const pd = px * dx + py * dy + pz * dz; px -= dx * pd; py -= dy * pd; pz -= dz * pd;
+      const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
+      L[knee] = hx + dx * ca + px * h; L[knee + 1] = hy + dy * ca + py * h; L[knee + 2] = hz + dz * ca + pz * h;
+      L[ank] = hx + dx * d; L[ank + 1] = hy + dy * d; L[ank + 2] = hz + dz * d;
+      L[toe] = L[ank] + ox; L[toe + 1] = L[ank + 1] + oy; L[toe + 2] = L[ank + 2] + oz;
+    }
+    if (tw) {
+      const ct = Math.cos(tw), st2 = Math.sin(tw);
+      for (const [hip, knee, ank, toe] of LEGS) for (const j of [hip, knee, ank, toe]) { const x = L[j], z = L[j + 2]; L[j] = x * ct + z * st2; L[j + 2] = -x * st2 + z * ct; }
     }
   }
   // lean: roll the upper body about the pelvis

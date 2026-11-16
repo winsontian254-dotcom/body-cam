@@ -29,13 +29,13 @@
      'mag'|'shell', empty, n (shells loaded), per (s), t } | null, melee: { kind 'slash'|'stab', u 0..1, side } | null,
      nade: { cook >= 0 while the pin is pulled, under } | null, thrown (s since the last throw), action: 'plant'|'defuse'|null,
      ground(x, z, yFrom) -> y | null, t (time, s) } */
-import { poseShapes, NSHAPE, STRIDE } from '../game/hitbox.js';
+import { poseShapes, NSHAPE, STRIDE, gaitParams, gaitFoot, gaitTwist } from '../game/hitbox.js';
 
 const TAU = Math.PI * 2;
 export const RIG = {
-  thigh: 0.405, shin: 0.40, ankle: 0.088,            // hip -> knee -> ankle, ankle height above the sole
+  thigh: 0.401, shin: 0.402, ankle: 0.10,             // hip -> knee -> ankle, ankle height above the sole (= hitbox.js legs)
   uarm: 0.29, farm: 0.268,                            // shoulder -> elbow -> wrist
-  footSpread: 0.105,                                  // half the stance width at the ankles
+  footSpread: 0.11,                                   // half the stance width at the ankles
   // glove frames relative to the weapon hand node: the glove mesh origin sits on the node; the wrist (forearm end) offset
   gripWrist: [0.057, -0.004, -0.132], holdWrist: [0.0585, 0.1105, -0.004], holdRoll: 1.1,   // glove-local wrist (cuff) points
 
@@ -130,7 +130,7 @@ export function newAnim(seed = 1) {
   return {
     init: false, legYaw: 0, phase: r * TAU, amp: 0, runK: 0, speed: 0, twist: 0, dirA: 0, turn: 0, turnAmp: 0,
     air: 0, vy: 0, landX: 0, landV: 0, kickX: 0, kickV: 0, kickR: 0, kickRV: 0, side: (r - 0.5) * 2,
-    flP: 0, flPV: 0, flR: 0, flRV: 0, flH: 0, flHV: 0, breath: r * 10, t: 0, idle: r * 7, lastX: 0, lastZ: 0,
+    flP: 0, flPV: 0, flR: 0, flRV: 0, flH: 0, flHV: 0, breath: r * 10, t: 0, idle: r * 7, lastX: 0, lastZ: 0, tph: 0,
     S: new Float32Array(NSHAPE * STRIDE), lean: 0, crouchS: 0, adsS: 0, act: 0,
   };
 }
@@ -163,7 +163,8 @@ function spring(A, x, v, k, d, dt) {
 // scratch
 const T = { a: V(), b: V(), c: V(), d: V(), e: V(), f: V(), g: V(), h: V(), p: V(), q: V(), r: V(), s: V(), u: V(), w: V(), up: [0, 1, 0] };
 const F1 = newFrame(), F2 = newFrame(), GL = newFrame();
-const HS = { pos: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, crouch: 0, lean: 0, gait: 0, gaitK: 0 };
+const HS = { pos: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, crouch: 0, lean: 0, gait: 0, gaitK: 0, gaitS: 0.8, gaitSt: 0.55, gaitH: 0.1, gaitDir: 0 };
+const GPA = { step: 1, st: 0.55, sweep: 0.8, lift: 0.1 }, GFA = [0, 0], GFT = [0, 0];
 const sh = (S, k, end, out) => { const o = k * STRIDE + (end ? 3 : 0); out[0] = S[o]; out[1] = S[o + 1]; out[2] = S[o + 2]; return out; };
 const mid = (S, k, out) => { const o = k * STRIDE; out[0] = (S[o] + S[o + 3]) / 2; out[1] = (S[o + 1] + S[o + 4]) / 2; out[2] = (S[o + 2] + S[o + 5]) / 2; return out; };
 
@@ -189,15 +190,16 @@ export function animate(A, I, dt, O) {
   // ---------------------------------------------------------------- locomotion state
   const spd = onG ? Math.hypot(vx, vz) : 0;
   A.speed = damp(A.speed, spd, 10, dt);
-  const moving = A.speed > 0.3;
+  const synced = I.gait != null && I.gaitK != null;
+  const moving = synced ? I.gaitK > 0.05 : A.speed > 0.3;
   const lx = vx * cy - vz * sy, lz = vx * sy + vz * cy;          // velocity in the view frame (x right, z forward)
   const alpha = Math.atan2(lx, lz);
   if (spd > 0.2) A.dirA = A.dirA + wrap(alpha - A.dirA) * (1 - Math.exp(-12 * dt));
   A.runK = damp(A.runK, smooth(2.6, 4.8, spd) * (1 - crouch), 6, dt);
   A.amp = damp(A.amp, moving ? clamp(A.speed / 1.1, 0, 1) : 0, moving ? 9 : 6, dt);
   // hips turn toward the motion when strafing (forward-diagonal) or away from it (backward-diagonal)
-  const twistT = moving && !act ? 0.42 * Math.sin(2 * A.dirA) * (1 - 0.4 * crouch) : 0;
-  A.twist = damp(A.twist, twistT, 8, dt);
+  if (synced) A.twist = act ? 0 : gaitTwist(I.gaitDir || 0, crouch, I.gaitK);     // exactly the hitbox legs' twist
+  else A.twist = damp(A.twist, moving && !act ? gaitTwist(A.dirA, crouch, 1) : 0, 8, dt);
   // legs lag the view when standing; step round once the twist passes ~32 degrees
   let legT = yaw + A.twist;
   if (!moving) {
@@ -206,30 +208,39 @@ export function animate(A, I, dt, O) {
     else legT = A.legYaw;
   } else A.turn = 0;
   const prevLeg = A.legYaw;
-  A.legYaw = A.legYaw + wrap(legT - A.legYaw) * (1 - Math.exp(-(moving ? 10 : A.turn ? 7 : 0) * dt));
+  A.legYaw = synced && moving ? legT : A.legYaw + wrap(legT - A.legYaw) * (1 - Math.exp(-(moving ? 10 : A.turn ? 7 : 0) * dt));
   const dLeg = Math.abs(wrap(A.legYaw - prevLeg));
   A.turnAmp = damp(A.turnAmp, A.turn ? 1 : 0, 10, dt);
-  // gait phase: a half cycle per step; distance-driven so the planted foot keeps its place
-  const stepLen = crouch > 0.5 ? clamp(0.32 + 0.16 * A.speed, 0.36, 0.7) : clamp(0.42 + 0.19 * A.speed, 0.5, 1.45);
-  A.phase = (A.phase + Math.PI * spd * dt / stepLen + dLeg * 2.2) % TAU;
+  // gait: the simulation's phase and step geometry (player.js updateGait, I.gait...) when the player is simulated here, so the legs
+  // match the hitbox legs exactly; otherwise (remote players) the same model advanced here from the interpolated speed
+  let gPh, gK, gS, gSt, gH, gDir;
+  if (synced) { gPh = I.gait; gK = I.gaitK; gS = I.gaitS != null ? I.gaitS : 0.8; gSt = I.gaitSt || 0.55; gH = I.gaitH != null ? I.gaitH : 0.1; gDir = I.gaitDir || 0; A.phase = gPh; A.amp = gK; }
+  else {
+    gaitParams(A.speed, crouch, GPA, Math.sin(A.dirA));
+    A.phase = (A.phase + Math.PI * spd * dt / GPA.step) % TAU;
+    gPh = A.phase; gK = A.amp; gS = GPA.sweep; gSt = GPA.st; gH = GPA.lift; gDir = A.dirA;
+  }
+  // turning in place: a few short lifted steps while the legs swing round
+  A.tph = (A.tph + dLeg * 4.4) % TAU;
   // airborne / landing
   if (!onG) A.air += dt; else A.air = 0;
   A.vy = I.vel ? I.vel.y || 0 : 0;
   const airK = smooth(0.04, 0.2, A.air);
   // ---------------------------------------------------------------- the hitbox upper body
   HS.pos.x = px; HS.pos.y = py; HS.pos.z = pz; HS.yaw = yaw; HS.pitch = pitch; HS.crouch = crouch; HS.lean = I.lean || 0;
+  HS.gait = gPh; HS.gaitK = onG ? gK : 0; HS.gaitS = gS; HS.gaitSt = gSt; HS.gaitH = gH; HS.gaitDir = gDir;
   const S = poseShapes(HS, A.S);
   const headC = sh(S, 0, 0, T.a), neck0 = sh(S, 1, 0, T.b), chA = sh(S, 2, 0, T.c), chB = sh(S, 2, 1, T.d), pelC = mid(S, 4, T.e);
   sh(S, 5, 0, J.shR); sh(S, 7, 0, J.shL); sh(S, 5, 1, J.elR); sh(S, 7, 1, J.elL);
   const haR = sh(S, 6, 1, T.f), haL = sh(S, 8, 1, T.g);
   sh(S, 9, 0, J.hipR); sh(S, 11, 0, J.hipL);
   // body offsets: run bob, landing dip, kneel
-  const bob = onG ? -Math.abs(Math.cos(A.phase)) * (0.012 + 0.03 * A.runK) * A.amp + 0.012 * A.amp : 0;
+  const bob = onG ? -Math.abs(Math.sin(A.phase)) * 0.012 * A.runK * A.amp : 0;
   const breathe = Math.sin(A.t * 1.7 + A.breath) * (0.004 + 0.006 * (1 - A.amp));
   const dropY = bob + A.landX * 0.22 - A.act * 0.12 * (1 - crouch);
   // ---------------------------------------------------------------- pelvis
   const legYaw = A.legYaw, ly = Math.sin(legYaw), lc = Math.cos(legYaw);
-  const pyaw = yaw + wrap(legYaw - yaw) * 0.7;
+  const pyaw = yaw + wrap(legYaw - yaw) * (moving ? 1 : 0.7);
   const pel = B.pelvis;
   set3(T.h, Math.cos(pyaw), 0, -Math.sin(pyaw));              // pelvis right
   set3(T.p, 0, 1, 0);
@@ -238,27 +249,23 @@ export function animate(A, I, dt, O) {
   rotLocal(pel, 0, 0.1 * A.runK + 0.18 * crouch + 0.12 * A.act);
   rotLocal(pel, 2, Math.sin(A.phase) * 0.05 * A.amp);
   // hips follow the pelvis frame (hitbox hip spacing .10)
-  frameMul(J.hipR, pel, 0.1, -0.015, 0); frameMul(J.hipL, pel, -0.1, -0.015, 0);
+  frameMul(J.hipR, pel, 0.1, 0.015, 0); frameMul(J.hipL, pel, -0.1, 0.015, 0);
   // ---------------------------------------------------------------- legs
-  const runK = A.runK;
-  const st = crouch > 0.5 ? 0.64 : lerp(0.6, 0.36, runK);
-  const sweepMax = crouch > 0.5 ? 0.62 : lerp(0.88, 1.12, runK);
-  const sweep = Math.min(sweepMax, stepLen * 2 * st) * A.amp;
   const beta = A.dirA - A.twist;                                 // motion direction relative to the legs
-  const mdx = Math.sin(beta), mdz = Math.cos(beta);
-  const liftH = (crouch > 0.5 ? 0.06 : lerp(0.075, 0.2, runK)) * A.amp + 0.05 * A.turnAmp;
+  const gd = synced ? gDir - A.twist : beta, mdx = Math.sin(gd), mdz = Math.cos(gd);
   const groundY = (x, z) => { const g = I.ground ? I.ground(x, z, py + 0.7) : null; return g == null || !Number.isFinite(g) || g < py - 0.6 ? py : g; };
   for (let k = 0; k < 2; k++) {
     const R = k === 0, side = R ? 1 : -1;
     const hip = R ? J.hipR : J.hipL, knee = R ? J.knR : J.knL, ank = R ? J.anR : J.anL;
-    const u = ((A.phase / TAU) + (R ? 0 : 0.5)) % 1;
-    let along, lift = 0, heel = 0;
-    if (u < st) { const s = u / st; along = sweep * (0.45 - s); heel = smooth(0.7, 1, s) * 0.45 * A.amp; }
-    else { const s = (u - st) / (1 - st), e = s * s * (3 - 2 * s); along = sweep * (-0.55 + e); lift = liftH * Math.pow(Math.sin(Math.PI * s), 0.85); heel = (1 - smooth(0, 0.35, s)) * 0.45 * A.amp - smooth(0.7, 1, s) * 0.2 * A.amp; }
+    gaitFoot(gPh + (R ? 0 : Math.PI), gS * gK, gSt, gH * gK, GFA);
+    gaitFoot(A.tph + (R ? 0 : Math.PI), 0, 0.5, 0.05 * A.turnAmp, GFT);
+    const along = GFA[0], lift = Math.max(GFA[1], GFT[1]);
+    // heel: rolls up at the end of the stance (toe-off), toes up as the foot reaches forward
+    const u = (((gPh + (R ? 0 : Math.PI) - Math.PI / 2) / TAU) % 1 + 1) % 1;
+    const heel = (u < gSt ? smooth(0.65, 1, u / gSt) * 0.5 : (1 - smooth(0, 0.4, (u - gSt) / (1 - gSt))) * 0.5 - smooth(0.7, 1, (u - gSt) / (1 - gSt)) * 0.22) * gK;
     // foot in the leg frame (x right, z forward), spread when stepping sideways so the feet do not cross
-    const spread = RIG.footSpread + 0.05 * Math.abs(mdx) * A.amp + 0.04 * crouch + 0.04 * A.act;
-    let fx = side * spread + mdx * along, fz = mdz * along + 0.02 + (A.act ? (R ? -0.32 : 0.12) * A.act : 0);
-    if (crouch > 0.5 && !moving) fz += R ? -0.06 : 0.04;      // a staggered crouch stance
+    const spread = RIG.footSpread + 0.05 * Math.abs(mdx) * gK + 0.04 * A.act;
+    let fx = side * spread + mdx * along, fz = mdz * along - 0.01 + (A.act ? (R ? -0.32 : 0.12) * A.act : 0);
     // world (legs frame: yaw = legYaw)
     let wx = px + fx * lc + fz * ly, wz = pz - fx * ly + fz * lc;
     let wy = groundY(wx, wz) + RIG.ankle + lift;
@@ -272,7 +279,7 @@ export function animate(A, I, dt, O) {
     }
     set3(ank, wx, wy, wz);
     // pole: knees over the toes (leg forward), slightly out
-    const pfx = side * 0.12 * (1 + crouch), pfz = 1;
+    const pfx = side * 0.08, pfz = 1;                          // as hitbox.js
     set3(T.u, pfx * lc + pfz * ly, 0.0, -pfx * ly + pfz * lc);
     if (A.act && R) { T.u[1] = -0.6; }
     ik2(knee, ank, hip, ank, RIG.thigh, RIG.shin, T.u);

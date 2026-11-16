@@ -702,7 +702,10 @@ export class Objectives {
     }
     if (s.hostages) {
       const cfg = this.cfg.hostage, resc = team === cfg.rescuers;
-      for (const h of s.hostages) if (h.state === 'idle') add(h.x, h.y + 1.35, h.z, 'HOSTAGE', resc ? COL.obj : COL.white, 'hostage', { edge: resc && !(me && me.carry), max: resc ? 0 : 40 });
+      // only the nearest hostage carries the word (a group of four labels piles up); the others show the icon + distance
+      let near = null, nd = Infinity;
+      if (me) for (const h of s.hostages) if (h.state === 'idle') { const q = d2(me.pos, h.x, h.z); if (q < nd) { nd = q; near = h; } }
+      for (const h of s.hostages) if (h.state === 'idle') add(h.x, h.y + 1.35, h.z, !me || h === near ? 'HOSTAGE' : '', resc ? COL.obj : COL.white, 'hostage', { edge: resc && !(me && me.carry), max: resc ? 0 : 40 });
       if (resc && me && me.carry) for (const r of (this.map.rescues && this.map.rescues.length ? this.map.rescues : this.map.rescue ? [this.map.rescue] : [])) add(r.x, (r.y || 0) + 1.5, r.z, 'RESCUE', COL.ok, 'extract', { edge: true, pulse: true });
     }
     if (s.flags) for (const t of [1, 2]) {

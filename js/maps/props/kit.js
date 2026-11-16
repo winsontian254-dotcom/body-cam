@@ -120,7 +120,10 @@ export const PROP_MATERIALS = {
   p_rock_red: PM('concrete', 'rock', 2.2, { color: '#8a6a52', desat: .4, macro: .22, anti: 1, por: .5 }),
   p_soil: PM('dirt', 'dirt', 2.0, { color: '#3e3125', desat: .3, macro: .2, por: .8 }),
   // plants (untextured parts)
-  p_leaf_core: PLAST([.05, .1, .035], { surf: 'grass', rough: .9 }), p_hedge_core: PLAST([.1, .17, .06], { surf: 'grass', rough: .95 }), p_stalk: PLAST([.36, .42, .14], { surf: 'grass', rough: .7 }), p_leaf_corn: PLAST([.28, .4, .1], { surf: 'grass', rough: .6 }),
+  // enamel / lacquer (appliances, painted cabinet fronts): smooth, no brushed grain on big flat panels
+  p_enamel_white: PLAST([.8, .8, .77], { surf: 'metal', rough: .28 }), p_enamel_black: PLAST([.045, .045, .05], { surf: 'metal', rough: .25 }),
+  p_lacquer_white: PLAST([.76, .75, .71], { surf: 'wood', rough: .4 }),
+  p_leaf_core: PLAST([.05, .1, .035], { surf: 'grass', rough: .9 }), p_hedge_core: PLAST([.17, .27, .09], { surf: 'grass', rough: .95 }), p_stalk: PLAST([.36, .42, .14], { surf: 'grass', rough: .7 }), p_leaf_corn: PLAST([.28, .4, .1], { surf: 'grass', rough: .6 }),
   p_dead_wood: PM('wood', 'wood_dark', 2.0, { color: '#5b5048', desat: .7, macro: .14, por: .6 }),
 };
 for (const k in PROP_MATERIALS) if (!MATERIALS[k]) MATERIALS[k] = PROP_MATERIALS[k];

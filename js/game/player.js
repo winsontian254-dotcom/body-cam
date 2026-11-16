@@ -17,10 +17,11 @@
      updateGait(p, dt)           advance the walk phase / amplitude (legs of hitboxes and bodies)
    PlayerState runtime extensions (all plain data): local, remote, skill, mv (move scratch), ws (weapon state, weapon.js),
      prev { x, y, z, eye, lean, crouch, yaw, pitch }, deadT (seconds dead), respawnT, dmgBy { id: { d, t } }, lastAttacker,
-     lastHurtT, life { kills, dmg }, frozen, stat { shots, hits }, lastSpawn, connected, gait (walk phase, rad) / gaitK (0..1)
+     lastHurtT, life { kills, dmg }, frozen, stat { shots, hits }, lastSpawn, connected, gait (walk phase, rad) / gaitK (0..1) / gaitS gaitSt gaitH gaitDir (step geometry: hitbox.js gaitParams)
      (updateGait after each movement step; hitbox.js swings the legs with them). */
 import { BTN as MOVE_BTN, moveStep, resetMove, eyeHeight, newMoveState } from '../phys/move.js';
 import { newWeaponState } from './weapon.js';
+import { gaitParams } from './hitbox.js';
 
 export const BTN = Object.freeze({ ...MOVE_BTN, MODE: 4096 });
 export const TEAM = Object.freeze({ NONE: 0, VANGUARD: 1, SENTINEL: 2 });
@@ -44,7 +45,7 @@ export function createPlayer({ id, name = 'Operator', team = 0, bot = false, loc
     skill, mv: newMoveState(), ws: newWeaponState(), frozen: false,
     prev: { x: 0, y: 0, z: 0, eye: 1.64, lean: 0, crouch: 0, yaw: 0, pitch: 0 },
     deadT: 0, respawnT: 0, dmgBy: {}, lastAttacker: null, lastHurtT: -99, life: { kills: 0, dmg: 0 },
-    stat: { shots: 0, hits: 0 }, lastSpawn: null, gait: 0, gaitK: 0,
+    stat: { shots: 0, hits: 0 }, lastSpawn: null, gait: 0, gaitK: 0, gaitS: 0.8, gaitSt: 0.55, gaitH: 0.1, gaitDir: 0,
   };
 }
 
@@ -126,13 +127,22 @@ export class LocalControls {
   }
 }
 
-/** Walk gait for the leg swing: phase advances with the horizontal speed (half a cycle per 1.1 m stride), amplitude eases with speed. */
+/** Walk gait: phase (half a cycle per step), amplitude, step geometry (hitbox.js gaitParams: speed / crouch dependent stride, so the
+    hitbox legs and the drawn legs agree and planted feet do not slide) and the motion direction relative to the facing. */
+const GP = { step: 1, st: 0.55, sweep: 0.8, lift: 0.1 };
 export function updateGait(p, dt) {
   const sp = p.onGround && !p.mantle ? Math.hypot(p.vel.x, p.vel.z) : 0;
-  const want = sp < 0.25 ? 0 : Math.min(1, sp / 4.5) * (1 - 0.45 * (p.crouch || 0));
-  p.gaitK += (want - p.gaitK) * Math.min(1, dt * 8);
+  const want = sp < 0.2 ? 0 : Math.min(1, sp / 1.0);
+  p.gaitK += (want - p.gaitK) * Math.min(1, dt * 9);
   if (p.gaitK < 0.005) p.gaitK = 0;
-  p.gait = (p.gait + sp * dt * Math.PI / 1.1) % (Math.PI * 2);
+  if (sp > 0.2) {
+    const sy = Math.sin(p.yaw), cy = Math.cos(p.yaw), lx = p.vel.x * cy - p.vel.z * sy, lz = p.vel.x * sy + p.vel.z * cy;
+    const d = Math.atan2(lx, lz), cur = p.gaitDir || 0, dd = Math.atan2(Math.sin(d - cur), Math.cos(d - cur));
+    p.gaitDir = cur + dd * Math.min(1, dt * 12);
+  }
+  gaitParams(sp, p.crouch, GP, Math.sin(p.gaitDir || 0));
+  p.gaitS = GP.sweep; p.gaitSt = GP.st; p.gaitH = GP.lift;
+  p.gait = (p.gait + sp * dt * Math.PI / GP.step) % (Math.PI * 2);
 }
 
 /** moveStep with a NaN guard (a corrupt state must never poison the world or the network). */

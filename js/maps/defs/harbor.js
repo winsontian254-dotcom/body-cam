@@ -415,7 +415,7 @@ export default {
     mark('out of bounds'); // ================================================================== out of bounds: ship, town, terminal, outside roads
     freighter(B, { zHull: 66.4, xStern: -128, xBow: 62, deck: 7.5, beam: 24 });
     skyline(B);
-    for (let x = -190; x < 190; x += 26) { B.prop('utility_pole', x, 0, -64.6, { variant: 'wood', span: 26, h: 9, seed: 1, inst: false }); }
+    for (let x = -190; x < 190; x += 26) { if (x > -34 && x < 10) continue; B.prop('utility_pole', x, 0, -64.6, { variant: 'wood', span: x === -34 ? 52 : x + 26 < 190 ? 26 : 0, ry: H, h: 9, seed: 1, inst: false }); }
     for (const [i, x] of [-60, -48, -20, 26, 50, 74].entries()) B.prop('car', x, 0, -76.6, { ry: H * (i % 2 ? 1 : -1), ...CARS[i % 5], collide: false, inst: false });
     paint(B, -200, -72, 200, -72, { col: WHT, w: .12, dash: [3, 6] });
     for (let i = 0; i < 9; i++) ccont(B, -88, i < 5 ? 0 : 2.591, -30 + (i % 5) * 9, H, { color: PAL[i * 3 % PAL.length], len: 20, collide: false });

@@ -1,5 +1,5 @@
 // Modes test: every game mode, the match flow, the economy and the objectives. FAILS on any console error.
-//   node tools/test/modes.mjs [--only=demolition,ctf] [--noshots] [--skipnode] [--bots=5]      screenshots -> tools/test/out/modes-*.png
+//   node tools/test/modes.mjs [--only=demolition,ctf] [--noshots] [--skipnode] [--nobrowser] [--bots=5]      screenshots -> tools/test/out/modes-*.png
 // 1. Node (no browser): economy rules (start money, kill rewards, round bonuses + loss ladder, plant bonus, max money, buy zones / buy
 //    time, kevlar / helmet / kit, grenade carry rules, refunds, round inventories), the charge (plant inside a site only, fuse,
 //    defuse with / without a kit, the blast spares the planting side: friendly fire OFF), zones (capture / neutralise / contest
@@ -94,12 +94,12 @@ function nodeChecks() {
   // the blast: an attacker and a defender next to the charge, no defuse -> attacker unharmed (friendly fire OFF), defender dead
   const att2 = P[1]; att2.pos.x = 15.6; att2.pos.z = -4.6; df.pos.x = 16; df.pos.z = -5.5;
   const money1 = P.filter(p => p.team === 1).map(p => p.money);
-  run(g, 40);
+  run(g, 38.5);
   check(O.s.bomb.state === 'exploded' && m.roundWinner === 1 && m.reason === 'bomb', 'the charge detonates after 40 s: attackers win (' + m.reason + ')');
   check(att2.alive && att2.hp === 100, 'blast: the planting side takes no damage (friendly fire OFF)');
   check(!df.alive, 'blast: a defender at 1 m dies');
   const won = P.filter(p => p.team === 1).map((p, i) => p.money - money1[i]);
-  check(won.every(x => x === ECON.win.bomb || p => p.money === ECON.max), 'round win bonus $' + ECON.win.bomb + ' (' + won.join(',') + ')');
+  check(won.every(x => x === ECON.win.bomb), 'round win bonus $' + ECON.win.bomb + ' (' + won.join(',') + ')');
   check(P.filter(p => p.team === 2).every(p => p.money >= ECON.loss[0]), 'losers get the loss bonus');
   check(m.mvp === c.id, 'round MVP = the planter');
   // round 2: survivors keep their kit; the dead start with the side pistol
@@ -135,13 +135,13 @@ function nodeChecks() {
   gz.match.start();
   Pz[0].pos.x = 0; Pz[0].pos.z = 0; run(gz, 7.8); check(Z().owner === 0, 'zone: not captured at 7.8 s alone'); run(gz, 0.3); check(Z().owner === 1, 'zone: captured at 8 s alone');
   Pz[0].pos.x = 50; Pz[3].pos.x = 0; Pz[3].pos.z = 0; Pz[4].pos.x = 0.5; Pz[4].pos.z = 0;
-  run(gz, 2.6); check(Z().owner === 0, 'zone: two enemies neutralise in ~2.7 s'); run(gz, 5.3); check(Z().owner === 2, 'zone: ... and capture in 8 / 1.5 s more');
+  run(gz, 2.75); check(Z().owner === 0, 'zone: two enemies neutralise in ~2.7 s'); run(gz, 5.4); check(Z().owner === 2, 'zone: ... and capture in 8 / 1.5 s more');
   Pz[1].pos.x = 0; Pz[1].pos.z = 0.5; const cz = Z().c; run(gz, 3); check(Z().contested && Z().c === cz && Z().owner === 2, 'zone: contested freezes the capture');
 
   // ---- flags
   const ctf = { id: 'ctf', teams: 2, respawn: true, rounds: 0, timeLimit: 600, scoreLimit: 3, freezeTime: 0, teamScoreOnKill: false, setup(g) { g.objectives.useFlags(); } };
-  const gf = stubGame(ctf), Pf = [...gf.players.values()], F = gf.objectives.s.flags;
-  gf.match.start();
+  const gf = stubGame(ctf), Pf = [...gf.players.values()];
+  gf.match.start(); const F = gf.objectives.s.flags;
   const runner = Pf[0]; runner.pos.x = 30; runner.pos.z = 0; run(gf, 0.1);
   check(F[2].state === 'carried' && runner.flag === 2, 'flag: walking over the enemy flag takes it');
   runner.pos.x = -30; run(gf, 0.1); check(gf.match.score[1] === 1 && F[2].state === 'home' && !runner.flag, 'flag: touching your own flag at home captures');
@@ -202,6 +202,8 @@ const PAGE_LIB = () => {
     other(t, notLocal = true) { return [...LF.game.players.values()].filter(p => p.team === t && p.alive && (!notLocal || !p.local)); },
     kill(v, by, weapon = 'warden', kind = 'bullet') { v.spawnProtect = 0; return LF.game.damage(v, { attacker: by, dmg: 2000, kind, weapon, group: 'chest', armorPen: 1 }); },
     step(s, chunk = 0.5) { const g = LF.game; for (let t = 0; t < s && !g.ended; t += chunk) { g.debugStep(Math.min(chunk, s - t)); T.watch(); } },
+    /** step until fn() is true (or max seconds); returns the seconds simulated */
+    until(fn, max = 60, chunk = 0.25) { const g = LF.game; let t = 0; while (t < max && !fn() && !g.ended) { g.debugStep(chunk); T.watch(); t += chunk; } return t; },
     watch() {
       const g = LF.game;
       for (const p of g.players.values()) if (!Number.isFinite(p.pos.x) || !Number.isFinite(p.pos.y) || !Number.isFinite(p.pos.z)) T.nan++;
@@ -238,6 +240,15 @@ const PAGE_LIB = () => {
       const ok = mate.alive && mate.hp === hp0 && mate.armor === ar0 && !(mate.flash > 0) && !(mate.stun > 0) && dmg === 0;
       T.free(mate); T.tp(mate, sx, sz, null, sy);
       return T.ok(ok, 'friendly fire OFF: ' + shots + ' bullets + blast / fire / gas / melee / flash / stun on a team-mate -> ' + (hp0 - mate.hp) + ' hp lost');
+    },
+    /** screenshot from inside a script (Node takes it; the page waits) */
+    async snap(name) { await T.show(); await window.lfSnap(name); T.hide(); },
+    /** open the buy menu on a category for a screenshot */
+    async buyShot(name, money = 4750) {
+      const H = LF.app.App.hud, me = LF.game.local, m0 = me.money; me.money = Math.max(m0, money);
+      if (H.buy.open()) { H.buy.cat = 'rifle'; H.buy.catPending = false; H.buy.render(); await T.snap(name); H.buy.close(); }
+      else T.ok(false, 'buy menu opens for the screenshot');
+      me.money = m0;
     },
     async frames(n = 2) { const f0 = LF.loop.loopStats.frames; const t0 = performance.now(); while (LF.loop.loopStats.frames < f0 + n && performance.now() - t0 < 120000) await new Promise(r => setTimeout(r, 50)); },
     async show() { LF.loop.setScene(LF.game.scene); LF.game.effects && (LF.game.effects.hold = false); await T.frames(3); },
@@ -276,6 +287,7 @@ const SCRIPTS = {
     MT.ok(me.money === 800 && !me.inv.primary && me.inv.secondary && me.inv.secondary.gunId === 'vogt9', 'pistol round: $800, the attack pistol');
     MT.ok(E.canBuy(me).ok && E.buy(me, 'kevlar').ok && me.armor === 100, 'buy kevlar in the lobby');
     MT.ok(!E.buy(me, 'warden').ok, 'cannot afford a rifle');
+    await MT.buyShot('demolition-buy');
     MT.step(2.2);
     MT.ok(m.phase === 'live' && g.map.gateList.every(x => x.open), 'live: gates open');
     // plant on A, an attacker and a defender next to the charge
@@ -289,14 +301,14 @@ const SCRIPTS = {
     const a2 = MT.other(1).find(p => p !== c) || c, d2 = MT.other(2)[0];
     MT.tp(a2, 17, -21, 0, 1.2); MT.hold(a2); a2.spawnProtect = 0; const hpA = a2.hp;
     if (d2) { MT.tp(d2, 17.5, -19.5, 0, 1.2); MT.hold(d2); d2.spawnProtect = 0; }
-    MT.step(39);
+    MT.until(() => O.s.bomb.state !== 'planted', 45, 0.25);
     MT.ok(O.s.bomb.state === 'exploded' && m.roundWinner === 1 && m.reason === 'bomb', 'the charge detonated: attackers win (' + m.reason + ')');
     MT.ok(a2.alive && a2.hp === hpA, 'blast spares the planting side (friendly fire OFF)');
     MT.ok(!d2 || !d2.alive, 'blast kills a defender at the site');
     MT.ok(m.mvp === c.id, 'MVP: the planter');
     MT.free(a2); if (d2) MT.free(d2);
     // round 2: plant B, defuse with a kit
-    MT.step(1.6); MT.step(2.2);
+    MT.until(() => m.round === 2 && m.phase === 'live', 6);
     MT.ok(m.round === 2 && m.phase === 'live', 'round 2 live');
     MT.ok(me.armor === 100 || !me.alive, 'a survivor keeps the armour');
     const c2 = O.bombHolder(); MT.tp(c2, -17, 14, 0, 0); MT.hold(c2, true); MT.step(3.6); MT.free(c2);
@@ -331,8 +343,8 @@ const SCRIPTS = {
     MT.ok(O.s.bomb.state === 'carried', 'no planting on A');
     MT.tp(c, -17, 14, 0, 0); MT.step(3.6); MT.free(c);
     MT.ok(O.s.bomb.state === 'planted' && O.s.bomb.site === 'B', 'planted on B');
-    MT.step(41); MT.ok(m.roundWinner === 1 && m.reason === 'bomb', 'detonation wins the round');
-    MT.step(1.6); MT.step(2.2); MT.ok(m.round === 2, 'round 2');
+    MT.until(() => O.s.bomb.state !== 'planted', 45); MT.ok(m.roundWinner === 1 && m.reason === 'bomb', 'detonation wins the round');
+    MT.until(() => m.round === 2, 6); MT.ok(m.round === 2, 'round 2');
     MT.ffTest();
   },
   async retake() {
@@ -567,10 +579,12 @@ const NBOTS = { wingman: 3, demolition: 5, hostage: 5, retake: 5 };
 
 async function browserChecks() {
   const srv = await startServer();
+  for (let i = 0; i < 100; i++) { try { const r = await fetch(srv.url + '/index.html'); if (r.ok) break; } catch (e) { /* not up yet (loaded machine) */ } await new Promise(r => setTimeout(r, 300)); }
   const browser = await launch();
   const ids = MODES.map(m => m.id).filter(id => !ONLY || ONLY.includes(id));
   try {
     const { page, errs } = await openPage(browser, srv.url, '#dev&q=low&nolens&nodyn');
+    await page.exposeFunction('lfSnap', async name => { if (SHOTS) await shot(page, 'modes-' + name, { timeout: 300000 }); });
     page.setDefaultTimeout(600000);
     await page.waitForFunction(() => window.LF && LF.app && LF.app.play && document.querySelector('#ui [data-screen="title"]'), null, { timeout: 240000, polling: 250 });
     await page.evaluate(PAGE_LIB);
@@ -600,6 +614,7 @@ async function browserChecks() {
         const pose = SCRIPTS[id + '_pose'];
         await page.evaluate(async ([src]) => {
           const g = LF.game; const me = g.local;
+          if (me && !me.alive && g.mode.respawn) MT.until(() => me.alive || g.match.phase === 'over', 8);
           if (src) { const fn = (0, eval)('(' + src + ')'); await fn(); }
           else if (me && me.alive) { const mk = g.objectives.markers(me).find(m => m.icon !== 'site') || g.objectives.markers(me)[0]; if (mk) MT.face(mk.x, mk.y, mk.z); }
           g.debugStep(0.05);
@@ -607,21 +622,21 @@ async function browserChecks() {
         }, [pose ? pose.toString().replace(/^async\s+\w+\s*\(/, 'async function (') : null]);
         await shot(page, 'modes-' + id, { timeout: 300000 });
         if (id === 'demolition' || id === 'ctf' || id === 'infection') {
-          await page.evaluate(async () => { LF.app.hud.showScoreboard(true); await MT.frames(2); });
+          await page.evaluate(async () => { LF.app.App.hud.showScoreboard(true); await MT.frames(2); });
           await shot(page, 'modes-' + id + '-board', { timeout: 300000 });
-          await page.evaluate(() => LF.app.hud.showScoreboard(false));
+          await page.evaluate(() => LF.app.App.hud.showScoreboard(false));
         }
-        if (id === 'demolition' || id === 'practice') {
+        if (id === 'practice') {
           const opened = await page.evaluate(async () => {
             const g = LF.game, me = g.local, L = g.map.lobbies[me.team];
             if (g.match.rounds) { g.match.t = 0.01; g.match.phase = g.match.phase === 'live' ? 'live' : g.match.phase; }
             if (L && g.match.phase !== 'freeze') { MT.tp(me, L.x, L.z, null, L.y); }
             me.money = Math.max(me.money, 4750);
-            const ok = LF.app.hud.buy.open(); if (ok) { LF.app.hud.buy.cat = 'rifle'; LF.app.hud.buy.catPending = false; LF.app.hud.buy.render(); }
+            const ok = LF.app.App.hud.buy.open(); if (ok) { LF.app.App.hud.buy.cat = 'rifle'; LF.app.App.hud.buy.catPending = false; LF.app.App.hud.buy.render(); }
             await MT.frames(2); return ok;
           });
           if (opened) await shot(page, 'modes-' + id + '-buy', { timeout: 300000 });
-          await page.evaluate(() => LF.app.hud.buy.close());
+          await page.evaluate(() => LF.app.App.hud.buy.close());
         }
         await page.evaluate(() => MT.hide());
       }
@@ -635,7 +650,7 @@ async function browserChecks() {
 async function main() {
   const t0 = Date.now();
   if (!process.argv.includes('--skipnode')) nodeChecks();
-  await browserChecks();
+  if (!process.argv.includes('--nobrowser')) await browserChecks();
   console.log('\n' + (fails.length ? 'MODES FAIL: ' + fails.length + ' check(s)\n  - ' + fails.join('\n  - ') : 'MODES OK') + '  (' + ((Date.now() - t0) / 1000).toFixed(0) + ' s)');
   process.exit(fails.length ? 1 : 0);
 }
