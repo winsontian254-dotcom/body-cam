@@ -44,3 +44,4 @@
 .by-msg.on { opacity: 1; } .by-msg.ok { background: rgba(12,48,22,.92); color: #b6f2c1; }
 @media (max-width: 1000px) { .by-body { grid-template-columns: 140px 1fr; } .by-side { display: none; } .by-items { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 600px) { .by-item { min-height: 84px; padding: 6px 8px; } .by-bars { display: none; } .by-panel { max-height: 94vh; } }
+@media (max-width: 1000px) and (max-height: 600px) { .by-items { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px; } .by-item { min-height: 0; } }

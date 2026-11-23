@@ -65,7 +65,7 @@ export class ModeHud {
     while (this.notesL.length > 3) this.notesL.pop().el.remove();
   }
   /** a new round: the last round's notices and MVP card go */
-  clearRound() { for (const n of this.notesL) n.el.remove(); this.notesL.length = 0; this.mvpT = 0; this.$.mvp.classList.remove('on'); }
+  clearRound() { for (const n of this.notesL) n.el.remove(); this.notesL.length = 0; for (const n of this.cashL) n.el.remove(); this.cashL.length = 0; this.mvpT = 0; this.$.mvp.classList.remove('on'); }
   alert(text, tone, secs = 3) { this.$.alert.textContent = text; this.$.alert.dataset.tone = tone || ''; this.$.alert.classList.add('on'); this.alertT = secs; }
   cash(delta, why) {
     const n = h('div', 'mh-delta ' + (delta > 0 ? 'up' : 'down'), (delta > 0 ? '+' : '−') + money(Math.abs(delta)) + (why ? ' <span>' + esc(why) + '</span>' : ''));

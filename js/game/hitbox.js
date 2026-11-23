@@ -3,8 +3,10 @@
      SHAPES            [{ name, group }] the 15 shapes in order (head, neck, chest, stomach, pelvis, arms x4, thighs, shins, feet)
      GROUP_MULT        { head 4, neck 2, chest 1, stomach 1.25, arm 1, leg .75 } (docs §4)
      NSHAPE, STRIDE    shape count and floats per shape in the pose array (ax ay az bx by bz r)
-     poseShapes(s, out?) -> Float32Array   shapes for a state-like object { pos, yaw, pitch, crouch, lean, gait?, gaitK? }
-                         (world space; a sphere is a capsule with a === b). Also used by the third-person placeholder bodies.
+     poseShapes(s, out?, grip?) -> Float32Array   shapes for a state-like object { pos, yaw, pitch, crouch, lean, gait?, gaitK?,
+                         ads? (else s.ws.ads), pistol? (else from s.inv[s.cur]) } (world space; a sphere is a capsule with a === b);
+                         grip ([x, y, z], optional) receives the right-hand grip anchor (js/chars/anim.js holds the gun there).
+                         The arms follow the drawn soldier: rifle or pistol hold, hip or aiming down the sights (ARMP).
      hitboxesOf(p, stamp) -> Float32Array   cached per player while `stamp` (the game tick) is unchanged
      raycastPlayer(p, ox, oy, oz, dx, dy, dz, maxDist, stamp, out?) -> out { t, shape, group, x, y, z } | null
                          nearest shape the ray enters within maxDist (dir normalised); broad phase first
@@ -16,6 +18,7 @@
    feet; lean rolls everything above the pelvis about the pelvis so the eye lands on phys/move.js leanOffset (.36 m sideways);
    gait (phase, stride, direction: player.js updateGait from the horizontal speed) moves the ankles along the same stance / swing
    curve as the drawn legs (gaitParams), so legs are hit where they are drawn. */
+import { getGun } from '../weapons/data.js';
 
 export const SHAPES = [
   { name: 'head', group: 'head' }, { name: 'neck', group: 'neck' }, { name: 'chest', group: 'chest' }, { name: 'stomach', group: 'stomach' },
@@ -31,7 +34,7 @@ export const NSHAPE = SHAPES.length, STRIDE = 7;
 const J = {
   head: [0, 1.665, 0.035], neck0: [0, 1.46, 0.0], neck1: [0, 1.56, 0.02], chest: [0, 1.30, 0.01], stom: [0, 1.06, 0.01], pelv: [0, 0.885, 0],
   shR: [0.195, 1.425, 0], shL: [-0.195, 1.425, 0], elR: [0.245, 1.185, 0.10], elL: [-0.205, 1.215, 0.21],
-  haR: [0.085, 1.245, 0.30], haL: [-0.035, 1.285, 0.47],
+  haR: [0.11, 1.385, 0.13], haL: [0.006, 1.36, 0.56], grR: [0.10, 1.30, 0.22],
   hipR: [0.10, 0.90, 0], hipL: [-0.10, 0.90, 0], knR: [0.11, 0.50, 0.03], knL: [-0.11, 0.50, 0.03],
   anR: [0.11, 0.10, -0.01], anL: [-0.11, 0.10, -0.01], toR: [0.115, 0.05, 0.13], toL: [-0.115, 0.05, 0.13],
 };
@@ -48,14 +51,36 @@ const IDX = Object.fromEntries(NAMES.map((n, i) => [n, i]));
 const BASE = new Float32Array(NAMES.length * 3);
 NAMES.forEach((n, i) => { BASE[i * 3] = J[n][0]; BASE[i * 3 + 1] = J[n][1]; BASE[i * 3 + 2] = J[n][2]; });
 const UPPER = new Uint8Array(NAMES.length), ARM = new Uint8Array(NAMES.length), KNEE = new Uint8Array(NAMES.length), HIP = new Uint8Array(NAMES.length);
-for (const n of ['head', 'neck0', 'neck1', 'chest', 'stom', 'shR', 'shL', 'elR', 'elL', 'haR', 'haL']) UPPER[IDX[n]] = 1;
-for (const n of ['elR', 'elL', 'haR', 'haL']) ARM[IDX[n]] = 1;
+for (const n of ['head', 'neck0', 'neck1', 'chest', 'stom', 'shR', 'shL', 'elR', 'elL', 'haR', 'haL', 'grR']) UPPER[IDX[n]] = 1;
+for (const n of ['elR', 'elL', 'haR', 'haL', 'grR']) ARM[IDX[n]] = 1;
+const RIGHT = new Uint8Array(NAMES.length); for (const n of ['elR', 'haR', 'grR']) RIGHT[IDX[n]] = 1;
+// arm poses (standing, pitch 0) measured on the drawn soldier (js/chars/anim.js IK to the weapon's hand nodes, an average rifle):
+// elbows, hand ends of the forearm capsules and the grip anchor grR (where the right hand holds the gun; anim.js reads it through
+// poseShapes(s, out, grip)) for a rifle / a pistol, at the hip and aiming down the sights (blended by ads 0..1)
+const ARMJ = ['elR', 'haR', 'elL', 'haL', 'grR'].map(n => IDX[n]);
+const ARMP = {
+  rifle: [[[0.33, 1.18, -0.03], [0.11, 1.385, 0.13], [-0.134, 1.315, 0.256], [0.006, 1.36, 0.56], [0.10, 1.30, 0.22]],
+          [[0.20, 1.20, 0.177], [0.147, 1.519, 0.075], [-0.13, 1.355, 0.272], [0.0, 1.489, 0.554], [0.10, 1.41, 0.22]]],
+  pistol: [[[0.283, 1.154, 0.037], [0.099, 1.419, 0.137], [-0.205, 1.201, 0.181], [0.056, 1.401, 0.103], [0.08, 1.32, 0.24]],
+           [[0.179, 1.213, 0.184], [0.064, 1.53, 0.212], [-0.179, 1.227, 0.199], [-0.014, 1.521, 0.212], [0.03, 1.42, 0.33]]],
+};
+const CAT = new Map();
+/** 'pistol' | 'rifle' (any long gun, knife and grenades use the rifle arms) from s.pistol, or the current weapon of a PlayerState */
+function armKind(s) {
+  if (s.pistol != null) return s.pistol ? 'pistol' : 'rifle';
+  const w = s.inv && s.cur && s.cur !== 'nade' && s.cur !== 'bomb' ? s.inv[s.cur] : null;
+  if (!w || w.melee || !w.gunId) return 'rifle';
+  let c = CAT.get(w.gunId);
+  if (c === undefined) { const g = getGun(w.gunId); c = g && g.cat === 'pistol' ? 'pistol' : 'rifle'; CAT.set(w.gunId, c); }
+  return c;
+}
 for (const n of ['knR', 'knL']) KNEE[IDX[n]] = 1;
 for (const n of ['pelv', 'hipR', 'hipL']) HIP[IDX[n]] = 1;
 const DEFI = DEF.map(([a, dxa, b, dxb, r]) => [IDX[a], dxa, IDX[b], dxb, r]);
 const LEGS = [[IDX.hipR * 3, IDX.knR * 3, IDX.anR * 3, IDX.toR * 3, 0], [IDX.hipL * 3, IDX.knL * 3, IDX.anL * 3, IDX.toL * 3, Math.PI]];
 
 const L = new Float32Array(NAMES.length * 3);   // local joints scratch
+const LS = new Float32Array(4);                   // shoulders before the lean
 const TAU = Math.PI * 2;
 /** gait cycle position 0..1 of a leg: the phase is offset so u = 0 is the foot planting at the front (phase - PI/2) */
 const gaitU = ph => { const u = ((ph - Math.PI / 2) / TAU) % 1; return u < 0 ? u + 1 : u; };
@@ -86,10 +111,15 @@ export function gaitParams(speed, crouch, out = { step: 1, st: 0.55, sweep: 0.8,
 const EYE_STAND = 1.64, EYE_CROUCH = 1.12, LEAN_DIST = 0.36, LEAN_DROP = 0.05;
 
 /** World-space shapes for a state-like object. */
-export function poseShapes(s, out = new Float32Array(NSHAPE * STRIDE)) {
+export function poseShapes(s, out = new Float32Array(NSHAPE * STRIDE), grip = null) {
   const c = Math.min(1, Math.max(0, s.crouch || 0)), lean = Math.max(-1, Math.min(1, s.lean || 0));
   const pitch = Math.max(-1.55, Math.min(1.55, s.pitch || 0)), yaw = s.yaw || 0;
   L.set(BASE);
+  // arms: rifle / pistol, hip -> aim down the sights
+  {
+    const T = ARMP[armKind(s)], a = Math.min(1, Math.max(0, s.ads != null ? s.ads : s.ws ? s.ws.ads || 0 : 0)), H = T[0], D = T[1];
+    for (let k = 0; k < 5; k++) { const i = ARMJ[k] * 3; for (let j = 0; j < 3; j++) L[i + j] = H[k][j] + (D[k][j] - H[k][j]) * a; }
+  }
   // pitch: arms about the shoulder line, head nod
   const sp = Math.sin(pitch), cp = Math.cos(pitch), sy0 = 1.425, sz0 = 0;
   for (let i = 0; i < NAMES.length; i++) {
@@ -154,15 +184,25 @@ export function poseShapes(s, out = new Float32Array(NSHAPE * STRIDE)) {
     const py = L[IDX.pelv * 3 + 1], eyeY = EYE_STAND - (EYE_STAND - EYE_CROUCH) * c, re = Math.max(0.3, eyeY - py);
     const k = Math.sin(lean * Math.PI / 2) * LEAN_DIST, th = Math.asin(Math.max(-0.95, Math.min(0.95, k / re)));
     const st = Math.sin(th), ct = Math.cos(th);
+    // the arms turn rigidly about their (sheared) shoulders so their lengths stay those of the drawn arms
+    const shr = IDX.shR * 3, shl = IDX.shL * 3, S0 = LS;
+    S0[0] = L[shr]; S0[1] = L[shr + 1]; S0[2] = L[shl]; S0[3] = L[shl + 1];
     for (let i = 0; i < NAMES.length; i++) {
-      if (!UPPER[i]) continue;
+      if (ARM[i] || !UPPER[i]) continue;
       // a shear + tilt: the eye height lands exactly on move.js leanOffset (sideways k, down LEAN_DROP)
       const x = L[i * 3], y = L[i * 3 + 1] - py;
       L[i * 3] = x * ct + y * (k / re); L[i * 3 + 1] = py + y - x * st * 0.5 - Math.abs(lean) * LEAN_DROP * (y / re);
     }
+    for (let i = 0; i < NAMES.length; i++) {
+      if (!ARM[i]) continue;
+      const r = RIGHT[i], ox = r ? S0[0] : S0[2], oy = r ? S0[1] : S0[3], sh = r ? shr : shl;
+      const x = L[i * 3] - ox, y = L[i * 3 + 1] - oy;
+      L[i * 3] = L[sh] + x * ct + y * st; L[i * 3 + 1] = L[sh + 1] - x * st + y * ct;
+    }
   }
   // to world
   const sy = Math.sin(yaw), cy = Math.cos(yaw), px = s.pos.x, py = s.pos.y, pz = s.pos.z;
+  if (grip) { const g = IDX.grR * 3; grip[0] = px + L[g] * cy + L[g + 2] * sy; grip[1] = py + L[g + 1]; grip[2] = pz - L[g] * sy + L[g + 2] * cy; }
   for (let k = 0; k < NSHAPE; k++) {
     const d = DEFI[k], o = k * STRIDE;
     const a = d[0] * 3, b = d[2] * 3;

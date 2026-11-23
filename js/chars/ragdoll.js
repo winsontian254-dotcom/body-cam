@@ -46,6 +46,7 @@ export class Ragdoll {
     this.P = new Float32Array(N * 3); this.Q = new Float32Array(N * 3);     // current, previous
     this.S = new Float32Array(N * 3);                                       // start of the sub-step (swept collision)
     this.R0 = new Float32Array(N * 3);                                      // death pose relative to the pelvis (muscle tone)
+    this.W = new Float32Array(N * 3); this.win = 0; this.calm = 0;          // sleep window
     this.rigid = []; this.range = []; this.t = 0; this.acc = 0; this.asleep = false; this.still = 0; this.N = N; this.fric = new Float32Array(N);
   }
   fromPose(O) {
@@ -64,7 +65,7 @@ export class Ragdoll {
     this.range = RANGE.map(([a, b, lo, hi]) => { const L = len(a, b); return [I[a] * 3, I[b] * 3, L * lo, L * hi]; });
     const p0 = I.pelvis * 3;
     for (let k = 0; k < N; k++) for (let j = 0; j < 3; j++) this.R0[k * 3 + j] = P[k * 3 + j] - P[p0 + j];
-    this.t = 0; this.asleep = false; this.still = 0;
+    this.t = 0; this.asleep = false; this.still = 0; this.W.set(P); this.win = 0; this.calm = 0;
     return this;
   }
   /** velocity in m/s added to every particle (Verlet: move the previous positions) */
@@ -90,18 +91,28 @@ export class Ragdoll {
     this.t += dt; this.acc = Math.min(this.acc + dt, 0.1);
     let moved = 0;
     while (this.acc >= SUB) { this.acc -= SUB; moved = Math.max(moved, this.sub(world)); }
-    // sleep once nothing has moved for a while
+    // sleep once nothing has moved for a while: per sub-step motion, or (contact jitter between the floor and the constraints)
+    // no particle more than 1.2 cm away from where it was a quarter of a second ago
     if (moved < 0.0006 && this.t > 0.6) { this.still += dt; if (this.still > 0.6) this.asleep = true; } else this.still = 0;
-    if (this.t > 12) this.asleep = true;
+    this.win += dt;
+    if (this.win >= 0.25) {
+      const P = this.P, W = this.W; let m = 0;
+      for (let k = 0; k < N * 3; k += 3) m = Math.max(m, Math.hypot(P[k] - W[k], P[k + 1] - W[k + 1], P[k + 2] - W[k + 2]));
+      this.calm = this.t > 0.8 && m < 0.012 ? this.calm + 1 : 0;
+      if (this.calm >= 2) this.asleep = true;
+      W.set(P); this.win = 0;
+    }
+    if (this.t > 8) this.asleep = true;
   }
   sub(world) {
     const P = this.P, Q = this.Q, S = this.S, h2 = SUB * SUB;
     S.set(P);
+    const late = this.t > 1.2 ? Math.max(0.9, 1 - (this.t - 1.2) * 0.05) : 1;
     // integrate (Verlet with a little air damping)
     for (let k = 0; k < N; k++) {
       const i = k * 3, f = this.fric[k];
-      const damp = 0.998 - f * 0.25;
-      const vx = (P[i] - Q[i]) * damp, vy = (P[i + 1] - Q[i + 1]) * (0.999), vz = (P[i + 2] - Q[i + 2]) * damp;
+      const damp = (0.998 - f * 0.25) * late;
+      const vx = (P[i] - Q[i]) * damp, vy = (P[i + 1] - Q[i + 1]) * (0.999 * late), vz = (P[i + 2] - Q[i + 2]) * damp;
       Q[i] = P[i]; Q[i + 1] = P[i + 1]; Q[i + 2] = P[i + 2];
       P[i] += vx; P[i + 1] += vy - GRAV * h2; P[i + 2] += vz;
       this.fric[k] = 0;
@@ -160,7 +171,7 @@ export class Ragdoll {
       const A = I[a] * 3, M = I[m] * 3, Bb = I[b] * 3;
       const cx = (P[A] + P[Bb]) / 2, cy = (P[A + 1] + P[Bb + 1]) / 2, cz = (P[A + 2] + P[Bb + 2]) / 2;
       const d = ((P[M] - cx) * fx + (P[M + 1] - cy) * fy + (P[M + 2] - cz) * fz) * sgn;
-      if (d < 0.015) { const k = (0.015 - d) * sgn; P[M] += fx * k; P[M + 1] += fy * k; P[M + 2] += fz * k; }
+      if (d < 0.008) { const k = (0.008 - d) * 0.5 * sgn; P[M] += fx * k; P[M + 1] += fy * k; P[M + 2] += fz * k; }
     };
     limb('hipR', 'knR', 'anR', 1); limb('hipL', 'knL', 'anL', 1);
     limb('shR', 'elR', 'wrR', -1); limb('shL', 'elL', 'wrL', -1);

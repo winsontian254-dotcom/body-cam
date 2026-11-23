@@ -1,9 +1,13 @@
 // Modes test: every game mode, the match flow, the economy and the objectives. FAILS on any console error.
-//   node tools/test/modes.mjs [--only=demolition,ctf] [--noshots] [--skipnode] [--nobrowser] [--bots=5]      screenshots -> tools/test/out/modes-*.png
+//   node tools/test/modes.mjs [--only=demolition,ctf] [--noshots] [--skipnode] [--nobrowser] [--bots=5] [--maps=harbor,nightclub|none]
+//                                                                         [--nodev] (skip the dev_range pass)  screenshots -> tools/test/out/modes-*.png
 // 1. Node (no browser): economy rules (start money, kill rewards, round bonuses + loss ladder, plant bonus, max money, buy zones / buy
 //    time, kevlar / helmet / kit, grenade carry rules, refunds, round inventories), the charge (plant inside a site only, fuse,
 //    defuse with / without a kit, the blast spares the planting side: friendly fire OFF), zones (capture / neutralise / contest
 //    timings), flags, dog tags, hostages, round flow with halftime + overtime, snapshot / apply.
+// 3. Real maps (--maps, default harbor + nightclub): every mode again with a generic script that reads the map's objective data
+//    (sites, hostages, rescue zones, zones, flags, extracts, hide spots on walkable ground; plant + defuse, rescue, capture, extract
+//    where the map says), then free bot play; friendly fire, NaN and console-error checks as above.
 // 2. Browser: each of the 26 modes on dev_range with bots, started through LF.app.play (the real menu controller) and simulated with
 //    LF.game.debugStep (the scene is detached while simulating: SwiftShader frames are slow): scripted objective play (plant +
 //    explode, defuse, hostage rescue, flag capture, zone capture, HQ, tags, VIP, juggernaut, ladders, infection, hide & seek...),
@@ -20,6 +24,8 @@ import { ECON } from '../../js/game/economy.js';
 import { MODES } from '../../js/modes/index.js';
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith('--' + k + '=')); return a ? a.split('=')[1] : d; };
+const MAPS = arg('maps', 'harbor,nightclub') === 'none' ? [] : arg('maps', 'harbor,nightclub').split(',');
+const MAPSHOTS = ['demolition', 'hostage', 'domination', 'ctf', 'vip', 'hideseek'];
 const ONLY = arg('only', '') ? arg('only', '').split(',') : null, SHOTS = !process.argv.includes('--noshots'), BOTS = +arg('bots', 5);
 const fails = [];
 const check = (cond, msg) => { if (!cond) { fails.push(msg); console.log('  FAIL ' + msg); } else console.log('  ok   ' + msg); };
@@ -228,6 +234,8 @@ const PAGE_LIB = () => {
       const yaw = me.yaw, x = me.pos.x + Math.sin(yaw) * 4, z = me.pos.z + Math.cos(yaw) * 4;
       const sx = mate.pos.x, sy = mate.pos.y, sz = mate.pos.z;
       T.tp(mate, x, z, yaw + Math.PI, me.pos.y); T.hold(mate, false);
+      const frozen = [...g.players.values()].filter(q => q !== me && q !== mate && !q.local && q.alive && g.bots && g.bots.brain(q));
+      for (const q of frozen) T.hold(q, false);         // nobody else shoots the team-mate while we measure it
       let shots = 0;
       if (me.inv.primary || me.inv.secondary) {
         g.aimAt(mate, 'chest'); const s0 = me.stat.shots;
@@ -238,7 +246,7 @@ const PAGE_LIB = () => {
       let dmg = 0;
       for (const kind of ['bullet', 'melee', 'blast', 'fire', 'gas']) dmg += g.damage(mate, { attacker: me, dmg: 80, kind, weapon: 'frag', group: 'chest', effects: { flash: 4, stun: 2, slow: { mul: 0.4, secs: 2 } } });
       const ok = mate.alive && mate.hp === hp0 && mate.armor === ar0 && !(mate.flash > 0) && !(mate.stun > 0) && dmg === 0;
-      T.free(mate); T.tp(mate, sx, sz, null, sy);
+      T.free(mate); for (const q of frozen) T.free(q); T.tp(mate, sx, sz, null, sy);
       return T.ok(ok, 'friendly fire OFF: ' + shots + ' bullets + blast / fire / gas / melee / flash / stun on a team-mate -> ' + (hp0 - mate.hp) + ' hp lost');
     },
     /** screenshot from inside a script (Node takes it; the page waits) */
@@ -254,6 +262,23 @@ const PAGE_LIB = () => {
     async show() { LF.loop.setScene(LF.game.scene); LF.game.effects && (LF.game.effects.hold = false); await T.frames(3); },
     hide() { LF.loop.setScene(null); },
     face(x, y, z) { const g = LF.game; g.aimAt({ x, y, z }); },
+    /** a walkable navgrid spot near (x, y, z) (inside rect r when given): real maps put crates on site centres */
+    spot(x, y, z, r, maxR = 5) {
+      const nav = LF.game.map.nav, P = { x: 0, y: 0, z: 0 };
+      if (r && nav.randomNode) {
+        let best = -1, bd = 1e9;
+        for (let k = 0; k < 40; k++) {
+          const i = nav.randomNode(Math.random, j => { nav.nodePos(j, P); return P.x > r.x0 + 0.4 && P.x < r.x1 - 0.4 && P.z > r.z0 + 0.4 && P.z < r.z1 - 0.4 && (y == null || Math.abs(P.y - y) < 2.5) && !(nav.isCrouchOnly && nav.isCrouchOnly(j)); });
+          if (i < 0) break; nav.nodePos(i, P); const d = Math.hypot(P.x - x, P.z - z); if (d < bd) { bd = d; best = i; }
+        }
+        if (best >= 0) return nav.nodePos(best, { x: 0, y: 0, z: 0 });
+      }
+      const i = nav.nearest(x, (y || 0) + 0.5, z, maxR);
+      return i >= 0 ? nav.nodePos(i, { x: 0, y: 0, z: 0 }) : { x, y: y || 0, z };
+    },
+    tpAt(q, x, y, z, r) { const P = T.spot(x, y, z, r); T.tp(q, P.x, P.z, q.yaw, P.y); return P; },
+    holdAll(except) { for (const q of LF.game.players.values()) if (!q.local && q !== except) T.hold(q, false); },
+    freeAll() { for (const q of LF.game.players.values()) if (!q.local) T.free(q); },
   };
 };
 
@@ -278,7 +303,8 @@ const SCRIPTS = {
     MT.tp(me, 0, -18, 0); MT.step(0.2);
     const m0 = me.money, r = E.buy(me, 'arbiter');
     MT.ok(E.free && r.ok && me.inv.primary.gunId === 'arbiter' && me.money === m0, 'free armory: any gun, free, anywhere (' + (r.reason || 'ok') + ')');
-    MT.ok(E.buy(me, 'kevhelm').ok && me.armor === 100 && me.helmet, 'free armory: armour');
+    me.armor = 0; me.helmet = false; const ra = E.buy(me, 'kevhelm');
+    MT.ok(ra.ok && me.armor === 100 && me.helmet && me.money === m0, 'free armory: armour + helmet, free (' + (ra.reason || 'ok') + ')');
     MT.step(15); MT.ffTest();
   },
   async demolition() {
@@ -558,6 +584,67 @@ const SCRIPTS = {
   },
 };
 
+/** Real-map script (any mode, any map): the map's objective data exists and sits on walkable ground, the objective works when the
+    players stand where the map data says (bots held still for the scripted part), then the bots play freely for a while and the
+    flow advances. Runs in the page with `id` = the mode id. */
+async function genericMap(id) {
+  const g = MT.g(), m = g.match, O = g.objectives, map = g.map, me = g.local, nav = map.nav;
+  const onNav = (q, what) => { const i = nav.nearest(q.x, (q.y || 0) + 0.5, q.z, 2.5); MT.ok(i >= 0, what + ' on walkable ground (' + [q.x, q.y || 0, q.z].map(v => v.toFixed(1)) + ')'); };
+  MT.until(() => m.phase === 'live', 20);
+  MT.ok(m.phase === 'live', 'live after the freeze');
+  MT.holdAll();
+  if (O.has('bomb')) {
+    for (const k of O.cfg.bomb.sites) { const S = map.sites[k]; MT.ok(!!S, 'site ' + k + ' exists'); if (S) onNav(S, 'site ' + k); }
+    const b = O.s.bomb;
+    if (b.state !== 'planted') {
+      const c = O.bombHolder(); MT.ok(!!c, 'someone carries the charge');
+      const k = O.cfg.bomb.sites[0], S = map.sites[k];
+      if (c && S) {
+        MT.tpAt(c, S.x, S.y, S.z, S); MT.hold(c, true); MT.until(() => b.state === 'planted', 6); MT.hold(c, false);
+        MT.ok(b.state === 'planted' && b.site === k, 'planted on ' + k + ' (' + b.state + ', at ' + [c.pos.x, c.pos.y, c.pos.z].map(v => v.toFixed(1)) + ')');
+      }
+    } else MT.ok(true, 'the charge starts planted on ' + b.site);
+    const df = MT.other(2)[0];
+    if (df && b.state === 'planted') {
+      df.inv.kit = true; MT.tp(df, b.x + 0.5, b.z, 0, b.y); MT.hold(df, true); MT.until(() => b.state !== 'planted', 12); MT.free(df);
+      MT.ok(b.state === 'defused' && m.roundWinner === 2, 'defused on the map: defenders win (' + b.state + ', ' + m.reason + ')');
+    }
+  } else if (O.has('hostage')) {
+    const H = O.s.hostages; MT.ok(H.length >= 2, 'hostages placed (' + H.length + ')');
+    for (const h of H) onNav(h, 'hostage ' + h.id);
+    const zs = map.rescues || []; MT.ok(zs.length > 0, 'rescue zone exists'); for (const z of zs) onNav(z, 'rescue zone');
+    const r = MT.other(1)[0], h0 = H[0];
+    if (r && h0 && zs[0]) {
+      MT.tp(r, h0.x + 0.8, h0.z, 0, h0.y); MT.hold(r, true); MT.until(() => h0.state === 'carried', 3); MT.hold(r, false);
+      MT.ok(h0.state === 'carried', 'hostage picked up');
+      MT.tpAt(r, zs[0].x, zs[0].y, zs[0].z, zs[0]); MT.step(0.3); MT.ok(h0.state === 'rescued', 'hostage rescued in the zone');
+    }
+  } else if (O.has('zones')) {
+    const act = O.s.zones.filter(z => z.active !== false); MT.ok(act.length >= 1, 'zones exist (' + O.s.zones.length + ')');
+    for (const z of O.s.zones) onNav(z, 'zone ' + z.label);
+    const z = act[0], a = MT.other(1)[0];
+    if (z && a) { MT.tp(a, z.x, z.z, 0, z.y); MT.until(() => z.owner === 1, 14); MT.ok(z.owner === 1, 'zone ' + z.label + ' captured on the map'); }
+  } else if (O.has('flags')) {
+    const F = O.s.flags; onNav({ x: F[1].hx, y: F[1].hy, z: F[1].hz }, 'flag 1'); onNav({ x: F[2].hx, y: F[2].hy, z: F[2].hz }, 'flag 2');
+    const a = MT.other(1)[0];
+    MT.tp(a, F[2].hx, F[2].hz, 0, F[2].hy); MT.step(0.2); MT.ok(F[2].state === 'carried', 'enemy flag taken');
+    MT.tp(a, F[1].hx + 0.4, F[1].hz, 0, F[1].hy); MT.step(0.2); MT.ok(m.score[1] >= 1, 'flag captured');
+  } else if (O.has('vip')) {
+    const v = g.players.get(O.s.vip.id), e = O.s.extracts[0];
+    for (const x of O.s.extracts) onNav(x, 'extract');
+    if (v && e) { MT.tpAt(v, e.x, e.y, e.z); MT.hold(v); MT.until(() => m.phase !== 'live', 5); MT.ok(m.reason === 'vip_escaped', 'VIP extracted (' + m.reason + ')'); }
+  } else if (id === 'hideseek') {
+    MT.ok((map.hides || []).length >= 4, 'hide spots (' + (map.hides || []).length + ')');
+  }
+  MT.ffTest();
+  MT.freeAll();
+  // free play: real bots on the real map
+  const r0 = m.round, s0 = (m.score[1] | 0) + (m.score[2] | 0); let kills = 0; g.bus.on('kill', () => kills++);
+  MT.step(m.rounds ? 50 : 40, 0.5);
+  const s1 = (m.score[1] | 0) + (m.score[2] | 0);
+  MT.ok(kills > 0 || m.round > r0 || s1 > s0 || [...g.players.values()].some(p => (p.score | 0) > 0), 'free play: the match moves (kills ' + kills + ', round ' + r0 + ' -> ' + m.round + ', ' + m.phase + ')');
+}
+
 /** match options per mode (short timers so the flow fits in a short simulation) */
 const OPTS = {
   demolition: { rounds: 4, freezeTime: 2, buyTime: 10, roundEndTime: 1.5, halftimeTime: 1, botMode: 'passive' },
@@ -588,7 +675,7 @@ async function browserChecks() {
     page.setDefaultTimeout(600000);
     await page.waitForFunction(() => window.LF && LF.app && LF.app.play && document.querySelector('#ui [data-screen="title"]'), null, { timeout: 240000, polling: 250 });
     await page.evaluate(PAGE_LIB);
-    for (const id of ids) {
+    for (const id of (process.argv.includes('--nodev') ? [] : ids)) {
       console.log('Mode ' + id);
       const e0 = errs.length;
       const t0 = Date.now();
@@ -643,6 +730,42 @@ async function browserChecks() {
       await page.evaluate(() => LF.app.toMenu());
       const errsNow = errs.slice(e0);
       check(errsNow.length === 0, id + ': zero console errors' + (errsNow.length ? ' -> ' + errsNow.slice(0, 4).join(' | ') : ''));
+    }
+    // ---- the same modes on real maps (generic script driven by the map's own objective data)
+    for (const mapId of MAPS) for (const id of ids) {
+      const tag = mapId + '/' + id;
+      console.log('Map ' + tag);
+      const e0 = errs.length, t0 = Date.now();
+      const opts = { ...(OPTS[id] || {}), botMode: undefined };
+      delete opts.botMode;
+      const ok = await page.evaluate(async ([mapId, id, opts, bots]) => {
+        const g = await LF.app.play({ mapId, modeId: id, bots, botSkill: 0.45, seed: 22, quality: 'low', local: { team: 1, name: 'Tester' }, options: opts });
+        if (!g) return false; MT.init(); return true;
+      }, [mapId, id, opts, NBOTS[id] ?? BOTS]);
+      check(ok, tag + ': match started');
+      if (!ok) continue;
+      const res = await page.evaluate(async ([src, id]) => {
+        try { const fn = (0, eval)('(' + src + ')'); await fn(id); } catch (e) { MT.ok(false, 'script threw: ' + (e && e.stack || e)); }
+        const g = LF.game;
+        return { checks: MT.checks, nan: MT.nan, ff: MT.ff, ffList: MT.ffList.slice(0, 6), phase: g.match.phase, round: g.match.round, score: { ...g.match.score } };
+      }, [genericMap.toString(), id]);
+      for (const [c, msg] of res.checks) check(c, tag + ': ' + msg);
+      check(res.nan === 0, tag + ': no NaN positions');
+      check(res.ff === 0, tag + ': no friendly damage during the whole run' + (res.ff ? ' -> ' + res.ffList.join(' | ') : ''));
+      console.log('    ' + tag + ': phase ' + res.phase + ', round ' + res.round + ', score ' + JSON.stringify(res.score) + ', ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
+      if (SHOTS && MAPSHOTS.includes(id)) {
+        await page.evaluate(async () => {
+          const g = LF.game, me = g.local;
+          if (me && !me.alive) MT.until(() => me.alive || g.match.phase === 'over' || g.match.phase === 'freeze', 12);
+          if (me && me.alive) { const mk = g.objectives.markers(me).find(m => m.icon !== 'site') || g.objectives.markers(me)[0]; if (mk) MT.face(mk.x, mk.y, mk.z); }
+          g.debugStep(0.05); await MT.show();
+        });
+        await shot(page, 'modes-map-' + mapId + '-' + id, { timeout: 300000 });
+        await page.evaluate(() => MT.hide());
+      }
+      await page.evaluate(() => LF.app.toMenu());
+      const errsNow = errs.slice(e0);
+      check(errsNow.length === 0, tag + ': zero console errors' + (errsNow.length ? ' -> ' + errsNow.slice(0, 4).join(' | ') : ''));
     }
   } finally { await browser.close(); srv.stop(); }
 }

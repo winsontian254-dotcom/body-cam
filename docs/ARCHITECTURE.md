@@ -1000,6 +1000,11 @@ that everything loads and estimates GPU memory per tier.
   `LF.game` (`debugStep`, `setLocalCommand`, `aimAt`): TDM kills / scores / no NaN / no fall-through / bots move / safe respawns /
   gates, combat rules (friendly fire, armour, penetration, exact RPM, semi limit, reload time, backstab), FFA, match end -> results ->
   menu, menu flow (title -> practice setup -> deploy -> pause -> quit -> second match). Screenshots `match-*.png`.
+* `node tools/test/modes.mjs [--only=a,b] [--maps=harbor,nightclub|none] [--nodev] [--noshots] [--skipnode]`: economy / objectives /
+  flow unit checks in Node, then every mode on dev_range with a scripted objective run (plant + explode, defuse, rescue, captures, HQ,
+  VIP, ladders, infection, hide & seek...), then every mode on the real maps with a generic script that reads the map's objective
+  data (on walkable ground; plant + defuse, rescue, capture, extract where the map says) and free bot play. Explicit friendly-fire
+  checks, no NaN, zero console errors. Screenshots `modes-*.png`, `modes-map-<map>-<mode>.png`.
 * Match dev hash: `#dev&map=<id>&mode=<id>&bots=<n>&team=1|2&q=low&autostart&seed=<n>&nolens&nodyn` + `&skill=0..1 &warmup=s &freeze=s
   &time=s &score=n &infammo=true|false &god &botmode=static|passive`. `game.effects.hold = game.viewmodel.hold = true` freezes the
   effects / viewmodel pose for screenshots (SwiftShader frames are slow).

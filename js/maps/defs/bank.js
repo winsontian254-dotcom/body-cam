@@ -14,16 +14,37 @@ import { PROPS } from '../props.js';
 const PI = Math.PI, H = PI / 2;
 const FY = 0.45, UY = 4.65, TOP = 7.75;      // ground floor, upper floor, upper ceiling
 const HALL = 8.05;                           // banking hall ceiling
+// Everything below is built in local coordinates (the plan above) inside a frame offset by (OX, OZ), so the whole map sits in ONE
+// 1024 m geometry chunk (the world origin would split it into four): one merged mesh per material, far fewer draw calls.
+const OX = 300, OZ = 300;
+const NOCAST = new Set(['bk_marble_floor', 'bk_vinyl', 'bk_carpet', 'bk_carpet_red', 'bk_oak', 'concrete_floor', 'pavement', 'asphalt', 'bk_line', 'bk_line_y',
+  'paint_yellow', 'bk_glow', 'p_lens_red', 'p_lens_clear', 'p_lens_amber', 'p_bag_blue', 'p_fab_green', 'p_plastic_beige', 'p_plastic_milky',
+  'p_coat_black', 'p_glass_dark', 'bk_marble_green', 'bk_ashlar', 'bk_brass', 'p_stainless', 'bk_door_paint', 'bk_carpet_red', 'bk_kerb',
+  'bk_marble_dk', 'p_coat_green', 'bk_awning_r', 'bk_awning_b', 'bk_stucco', 'p_glass_tint', 'glass']);
 
 export default {
   id: 'bank', name: 'First Federal', size: 'M',
   desc: 'Downtown bank branch and the streets around it: marble banking hall, vault, back offices, loading alley, roof.',
   env: { hdri: 'partly_cloudy', sky: 'hdri', time: 'day', exposure: 1.0, sun: { color: [1, 0.97, 0.9], intensity: 1.0 },
     fog: { color: [0.7, 0.75, 0.82], density: 0.0026 }, weather: 'clear', wind: [2, 1], ambience: 'city', reverb: 'outdoor', indoorIbl: 0.45 },
-  bounds: { minX: -86, maxX: 46, minZ: -66, maxZ: 42, minY: -2, maxY: 30 },
-  chunk: 48,
+  bounds: { minX: -86 + OX, maxX: 46 + OX, minZ: -66 + OZ, maxZ: 42 + OZ, minY: -2, maxY: 30 },
+  chunk: 1024,
 
   build(B) {
+    // shadow casters by material: floors, lenses, glows, markings and small trim never cast (fewer meshes in the shadow pass,
+    // and all of a material's geometry lands in one merged mesh). The builder has no public per-material cast policy yet, so
+    // this wraps its accumulator lookup on this builder instance only (falls back to the plain build if the internals change).
+    const acc = B._acc, accMat = B._accMat;
+    if (typeof acc === 'function') B._acc = function (name, x, z, cast, receive) { return acc.call(this, name, x, z, cast !== false && !NOCAST.has(name), receive); };
+    if (typeof accMat === 'function') B._accMat = function (mat, x, z, cast, receive) {
+      return accMat.call(this, mat, x, z, cast !== false && !NOCAST.has(String(mat && mat.name).replace(/^m_/, '')), receive);
+    };
+    B.push(OX, 0, OZ);
+    try { buildLocal(B); } finally { B.pop(); if (acc) B._acc = acc; if (accMat) B._accMat = accMat; }
+  },
+};
+
+function buildLocal(B) {
     let seedK = 0;
     // props: no shadows and no instancing by default (merged into the chunks: fewer draw calls); organic ones share 3 seeds
     const P = (type, x, y, z, o = {}) => {
@@ -650,5 +671,4 @@ export default {
       B.spawn(0, x, y, z, Math.atan2(-x, -z));
 
     flushSigns(B);
-  },
-};
+}

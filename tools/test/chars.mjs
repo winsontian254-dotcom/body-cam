@@ -8,6 +8,7 @@
 //   ragdoll    deaths on the stairs and against a wall: settles, stays above the floor, no NaN
 //   perf       16 characters in view: draw calls, instances, CPU time of the bodies system
 //   view       the local view of team-mates (name tags, rim) and enemies, third-person muzzle flash
+//   maps       real maps (--maps=harbor,tower): 20 s of bot play, joints finite, feet on the floors, a screenshot
 // FAILS on any console error.   node tools/test/chars.mjs [--only=lineup,strips,...]     screenshots -> tools/test/out/chars-*.png
 import { launch, startServer, shot as shot0 } from './lib.mjs';
 import { openPage } from './smoke.mjs';
@@ -212,7 +213,7 @@ async function main() {
         const g = LF.game; C.hideAll();
         const killer = C.place(C.P[0], 0, -16, 0, { gun: 'purga' });
         // stairs in the main building (x -5.2..0.4 along +x at z 6.6, y .12 -> 3.32), a wall (the building's south face z = -8)
-        const a = C.place(C.P[1], -2.6, 6.6, -Math.PI / 2, { gun: 'purga' }), b = C.place(C.P[2], 3, -9.0, Math.PI, { gun: 'warden' }), c = C.place(C.P[3], -14, -16, 0.3, { gun: 'spatz', vx: 0, vz: 5.5 });
+        const sy = g.world.groundAt(-2.6, 6.6, 2.6, 0.3), a = C.place(C.P[1], -2.6, 6.6, -Math.PI / 2, { gun: 'purga', y: sy ? sy.y : 0 }), b = C.place(C.P[2], 3, -9.0, Math.PI, { gun: 'warden' }), c = C.place(C.P[3], -14, -16, 0.3, { gun: 'spatz', vx: 0, vz: 5.5 });
         C.run(20);
         const kill = (v, dir, group) => { g.bus.emit('hit', { attacker: killer, victim: v, dmg: 60, group, dir, point: { ...v.pos } }); v.alive = false; g.bus.emit('kill', { killer, victim: v, weapon: 'purga', headshot: group === 'head' }); };
         kill(a, { x: 1, y: 0, z: 0 }, 'chest'); kill(b, { x: 0, y: 0, z: 1 }, 'head'); kill(c, { x: 0, y: 0, z: 1 }, 'chest');
@@ -289,6 +290,36 @@ async function main() {
     console.log('console errors: ' + errs.length); for (const e of errs.slice(0, 10)) console.log('  ' + e);
     check(errs.length === 0, 'zero console errors');
     await ctx.close();
+    // ===================================================================== real maps: bots playing, the soldiers on the map's floors
+    if (want('maps')) for (const map of (arg('maps', 'harbor,tower')).split(',')) {
+      console.log('Map ' + map);
+      const { ctx: c2, page: pg, errs: e2 } = await openPage(browser, srv.url, '#dev&map=' + map + '&mode=tdm&bots=9&q=low&autostart&nolens&nodyn&seed=4&freeze=0');
+      await pg.waitForFunction(() => window.LF && LF.game && LF.game.ready, null, { timeout: 300000, polling: 500 });
+      const r = await pg.evaluate(() => {
+        const g = LF.game, B = g.bodies; LF.loop.setPaused(true);
+        let bad = 0, deaths = 0; const off = g.bus.on('kill', () => deaths++);
+        for (let i = 0; i < 40; i++) { g.debugStep(0.5); B.frame(1 / 30, 1); for (const c of B.list.values()) { const O = B.poseOf(c.p); if (O && !Object.values(O.joints).every(v => v.every(Number.isFinite))) bad++; } }
+        if (off) off();
+        // camera: behind and above a live bot, looking at it and its nearest neighbour
+        const ps = [...g.players.values()].filter(p => p.alive && p !== g.local);
+        const p = ps[0]; B.thirdPersonOverride = true; document.getElementById('hud').style.visibility = 'hidden';
+        if (g.viewmodel && g.viewmodel.holder) g.viewmodel.holder.setEnabled(false);
+        const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+        B.debug.cam = { pos: [p.pos.x - fx * 3.2 + fz * 1.2, p.pos.y + 1.9, p.pos.z - fz * 3.2 - fx * 1.2], target: [p.pos.x, p.pos.y + 1.0, p.pos.z], fov: 0.8 };
+        B.timeScale = 0;
+        // feet on the floor: every live character's lowest ankle vs the ground under it
+        let worst = 0;
+        for (const c of B.list.values()) { if (!c.p.alive) continue; const O = B.poseOf(c.p); if (!O) continue; const a = O.joints.anR[1] < O.joints.anL[1] ? O.joints.anR : O.joints.anL;
+          const gr = g.world.groundAt(a[0], a[2], a[1] + 0.6, 0.2); if (gr && c.p.onGround) worst = Math.max(worst, Math.abs(a[1] - 0.1 - gr.y)); }
+        return { bad, deaths, corpses: B.corpses.length, st: B.stats(), worst, alive: ps.length };
+      });
+      await frames(pg, 3); await shot(pg, 'chars-map-' + map);
+      console.log('  ' + JSON.stringify(r));
+      check(r.st.ok && !r.st.fallback && r.bad === 0, map + ': characters drawn, no NaN joints over 20 s of bot play');
+      check(r.worst < 0.12, map + ': planted feet on the floor (worst ' + r.worst.toFixed(3) + ' m)');
+      check(e2.length === 0, map + ': zero console errors' + (e2.length ? ' ' + e2.slice(0, 3).join(' | ') : ''));
+      await c2.close();
+    }
   } finally { await browser.close(); srv.stop(); }
   console.log((fails.length ? 'FAILED ' + fails.length : 'PASSED') + ' in ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
   process.exit(fails.length ? 1 : 0);

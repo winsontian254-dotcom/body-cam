@@ -131,7 +131,7 @@ export function newAnim(seed = 1) {
     init: false, legYaw: 0, phase: r * TAU, amp: 0, runK: 0, speed: 0, twist: 0, dirA: 0, turn: 0, turnAmp: 0,
     air: 0, vy: 0, landX: 0, landV: 0, kickX: 0, kickV: 0, kickR: 0, kickRV: 0, side: (r - 0.5) * 2,
     flP: 0, flPV: 0, flR: 0, flRV: 0, flH: 0, flHV: 0, breath: r * 10, t: 0, idle: r * 7, lastX: 0, lastZ: 0, tph: 0,
-    S: new Float32Array(NSHAPE * STRIDE), lean: 0, crouchS: 0, adsS: 0, act: 0,
+    S: new Float32Array(NSHAPE * STRIDE), grip: [0, 0, 0], lean: 0, crouchS: 0, adsS: 0, act: 0,
   };
 }
 export function newPose() {
@@ -163,7 +163,7 @@ function spring(A, x, v, k, d, dt) {
 // scratch
 const T = { a: V(), b: V(), c: V(), d: V(), e: V(), f: V(), g: V(), h: V(), p: V(), q: V(), r: V(), s: V(), u: V(), w: V(), up: [0, 1, 0] };
 const F1 = newFrame(), F2 = newFrame(), GL = newFrame();
-const HS = { pos: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, crouch: 0, lean: 0, gait: 0, gaitK: 0, gaitS: 0.8, gaitSt: 0.55, gaitH: 0.1, gaitDir: 0 };
+const HS = { pos: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, crouch: 0, lean: 0, ads: 0, pistol: false, gait: 0, gaitK: 0, gaitS: 0.8, gaitSt: 0.55, gaitH: 0.1, gaitDir: 0 };
 const GPA = { step: 1, st: 0.55, sweep: 0.8, lift: 0.1 }, GFA = [0, 0], GFT = [0, 0];
 const sh = (S, k, end, out) => { const o = k * STRIDE + (end ? 3 : 0); out[0] = S[o]; out[1] = S[o + 1]; out[2] = S[o + 2]; return out; };
 const mid = (S, k, out) => { const o = k * STRIDE; out[0] = (S[o] + S[o + 3]) / 2; out[1] = (S[o + 1] + S[o + 4]) / 2; out[2] = (S[o + 2] + S[o + 5]) / 2; return out; };
@@ -229,10 +229,10 @@ export function animate(A, I, dt, O) {
   // ---------------------------------------------------------------- the hitbox upper body
   HS.pos.x = px; HS.pos.y = py; HS.pos.z = pz; HS.yaw = yaw; HS.pitch = pitch; HS.crouch = crouch; HS.lean = I.lean || 0;
   HS.gait = gPh; HS.gaitK = onG ? gK : 0; HS.gaitS = gS; HS.gaitSt = gSt; HS.gaitH = gH; HS.gaitDir = gDir;
-  const S = poseShapes(HS, A.S);
+  HS.ads = A.adsS; HS.pistol = I.hold === 'pistol';
+  const S = poseShapes(HS, A.S, A.grip);
   const headC = sh(S, 0, 0, T.a), neck0 = sh(S, 1, 0, T.b), chA = sh(S, 2, 0, T.c), chB = sh(S, 2, 1, T.d), pelC = mid(S, 4, T.e);
   sh(S, 5, 0, J.shR); sh(S, 7, 0, J.shL); sh(S, 5, 1, J.elR); sh(S, 7, 1, J.elL);
-  const haR = sh(S, 6, 1, T.f), haL = sh(S, 8, 1, T.g);
   sh(S, 9, 0, J.hipR); sh(S, 11, 0, J.hipL);
   // body offsets: run bob, landing dip, kneel
   const bob = onG ? -Math.abs(Math.sin(A.phase)) * 0.012 * A.runK * A.amp : 0;
@@ -341,10 +341,8 @@ export function animate(A, I, dt, O) {
     O.gunOn = true;
     const pist = hold === 'pistol';
     // grip position: the hitbox hand point (low ready) raised toward the eye line when aiming
-    set3(T.p, haR[0], haR[1] + dropY, haR[2]);
-    const raise = pist ? 0.05 + 0.1 * ads : 0.03 + 0.11 * ads, fwd = pist ? 0.02 + 0.09 * ads : 0.0;
-    T.p[0] = haR[0] + T.s[0] * fwd; T.p[1] = haR[1] + dropY + raise + T.s[1] * fwd; T.p[2] = haR[2] + T.s[2] * fwd;
-    if (pist) { T.p[0] += aim.x[0] * -0.05 * (0.4 + ads); T.p[2] += aim.x[2] * -0.05 * (0.4 + ads); }
+    // (hitbox.js grR: rifle / pistol, hip -> sights, already pitched, crouched and leaned with the arms)
+    set3(T.p, A.grip[0], A.grip[1] + dropY, A.grip[2]);
     // gun frame
     copyFrame(gun, aim);
     // recoil: muzzle rise + push back; run sway; flinch
@@ -451,7 +449,7 @@ export function animate(A, I, dt, O) {
     const R = k === 0, s = R ? J.shR : J.shL, w = R ? J.wrR : J.wrL, e = R ? J.elR : J.elL;
     // pole: down and out (and a little back); with a gun, toward the hitbox elbow
     frameDir(T.u, ch, R ? 0.7 : -0.7, -1, -0.25);
-    if (O.gunOn) { const he = R ? sh(S, 5, 1, T.d) : sh(S, 7, 1, T.d); set3(T.u, he[0] - (s[0] + w[0]) / 2, he[1] - (s[1] + w[1]) / 2 - 0.05, he[2] - (s[2] + w[2]) / 2); }
+    if (O.gunOn) { const he = R ? sh(S, 5, 1, T.d) : sh(S, 7, 1, T.d); set3(T.u, he[0] - (s[0] + w[0]) / 2, he[1] - (s[1] + w[1]) / 2, he[2] - (s[2] + w[2]) / 2); }
     ik2(e, T.q, s, w, RIG.uarm, RIG.farm, T.u);
     cpy(w, T.q);
     const ua = R ? B.uarmR : B.uarmL, fa = R ? B.farmR : B.farmL, hd2 = R ? hR : hL;

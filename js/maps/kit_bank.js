@@ -463,7 +463,7 @@ export function skyline(B, list) {
     g.quad([x1, 0, z0], [x1, 0, z1], [x1, h, z1], [x1, h, z0], [1, 0, 0], [0, 0, d / U, 0, d / U, h / V, 0, h / V]);
     roof.quad([x0, h, z1], [x1, h, z1], [x1, h, z0], [x0, h, z0], [0, 1, 0], [0, 0, 1, 0, 1, 1, 0, 1]);
   }
-  B.push(); B.stack[B.stack.length - 1] = { c: 1, s: 0, th: 0, tx: 0, ty: 0, tz: 0, k: 1 };
+  B.push();                                    // list coordinates are in the current frame (the map's local plan)
   G.forEach((g, i) => { const m = g.mesh('bk_skyline' + i, B.scene, mats[i]); if (m) B.mesh(m, { merge: false, collide: 'none', cast: false, receive: false }); });
   const rm = roof.mesh('bk_skyroof', B.scene, B.mat('bk_roof')); if (rm) B.mesh(rm, { merge: false, collide: 'none', cast: false, receive: false });
   B.pop();

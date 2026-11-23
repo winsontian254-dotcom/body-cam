@@ -480,13 +480,18 @@ export function stairTower(B, x, z, levels, o = {}) {
   const top = levels[levels.length - 1] + 2.2;
   for (const [sx, sz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1], [x0, z], [x1, z]]) { K.cyl(GALV, sx, 0, sz, .024, top, { seg: 6 }); B.collider({ cx: sx, cy: top / 2, cz: sz, hx: .05, hy: top / 2, hz: .05, surf: 'metal' }); }
   for (let y = 2; y < top; y += 2) { K.cylX(GALV, x0 - .1, x1 + .1, y, z0, .024, { seg: 6 }); K.cylX(GALV, x0 - .1, x1 + .1, y, z1, .024, { seg: 6 }); K.cylZ(GALV, z0 - .1, z1 + .1, x0, y, .024, { seg: 6 }); K.cylZ(GALV, z0 - .1, z1 + .1, x1, y, .024, { seg: 6 }); }
-  // outer (east) side: guard collider over the whole height, west too unless open
-  B.box(x1 + .02, levels[0], z, .06, top - levels[0], d, { visible: false, ray: false, surf: 'metal' });
-  for (let i = 0; i + 1 < levels.length; i++) {
-    const ya = levels[i], yb = levels[i + 1];
-    if (!o.westWall || !o.westWall(i)) continue;
-    B.box(x0 - .02, ya + (i ? 1.1 : 0), z + 1.2, .06, yb - ya - (i ? 1.1 : 0) + 1.1, d - 2.4, { visible: false, ray: false, surf: 'metal' });
+  // outer side (o.outer 'e' default | 'w'): guard over the whole height; inner side: guarded per storey except at open landings
+  const outer = o.outer || 'e', xo = outer === 'e' ? x1 + .02 : x0 - .02, xi = outer === 'e' ? x0 - .02 : x1 + .02, inner = outer === 'e' ? 'w' : 'e';
+  B.box(xo, levels[0], z, .06, top - levels[0], d, { visible: false, ray: false, surf: 'metal' });
+  const y0 = levels[0];
+  B.box(xi, y0, z + .6, .06, top - y0, d - 1.2, { visible: false, ray: false, surf: 'metal' });
+  // south strip (arrival landings): solid except a 2.3 m window at each landing open on the inner side
+  let yc = y0;
+  for (let lv = 1; lv < levels.length; lv++) if (isOpen(lv, inner)) {
+    if (levels[lv] - yc > .05) B.box(xi, yc, z0 + .6, .06, levels[lv] - yc, 1.2, { visible: false, ray: false, surf: 'metal' });
+    yc = levels[lv] + 2.3;
   }
+  if (top - yc > .05) B.box(xi, yc, z0 + .6, .06, top - yc, 1.2, { visible: false, ray: false, surf: 'metal' });
 }
 
 /** yellow mesh edge-protection barrier along a slab edge at floor y (movement-only collider) */
