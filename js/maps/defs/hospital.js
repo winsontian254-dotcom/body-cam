@@ -37,11 +37,14 @@ export default {
   env: { hdri: 'night_city', sky: 'night', time: 'night', exposure: 1.15, sun: { dir: [.35, -.75, .55], color: [.6, .7, 1], intensity: .8 },
     ambient: [.32, .34, .38], fog: { color: [.035, .04, .05], density: .006 }, weather: 'clear', ambience: 'hospital', reverb: 'room', indoorIbl: .6 },
   bounds: { minX: -54, maxX: 62, minZ: -86, maxZ: 41.5, minY: -6, maxY: 14 },
-  chunk: 40,
+  chunk: 64,
 
   build(B) {
-    ground(B); shell(B); floorsAndRoofs(B); groundFloor(B); firstFloor(B); basement(B); stairs(B); garage(B); outdoors(B);
-    dress(B); lights(B); markers(B); skylineAll(B);
+    // everything under a roof is built through `I` (no shadow casting: the roofs and the shell keep the moonlight out anyway,
+    // and a few hundred interior casters in the sun's shadow map cost more draw calls than the rest of the frame)
+    const I = indoor(B);
+    ground(I); shell(B); floorsAndRoofs(B); groundFloor(I); firstFloor(I); basement(I); stairs(I); garage(B); outdoors(B);
+    dress(B, I); lights(B); markers(B); skylineAll(I);
     flushDecals(B);
   },
 };
@@ -74,6 +77,11 @@ function ground(B) {
   for (const r of cut({ x0: -54, z0: -86, x1: 62, z1: -62 }, [GAR, { x0: -14, z0: -70, x1: 14, z1: -62 }])) B.floor(r.x0, r.z0, r.x1, r.z1, .05, { mat: 'grass', t: .4 });
   B.floor(-54, 40.15, 48.15, 41.5, .05, { mat: 'gravel', t: .4 });
   B.floor(-54, -14.15, -48.15, 40.15, .05, { mat: 'grass', t: .4 });
+  // the city floor out of bounds (streets and verges under the skyline blocks; no colliders, nobody gets there)
+  const OUT = { x0: -140, z0: -150, x1: 150, z1: 130 };
+  for (const r of cut(OUT, [ALL])) B.floor(r.x0, r.z0, r.x1, r.z1, 0, { mat: 'asphalt', t: .3, collide: false });
+  for (const [x0, z0, x1, z1] of [[-100, -96, 110, -90], [-70, -150, -62, 130], [72, -150, 78, 130], [-100, 60, 110, 66]])
+    B.floor(x0, z0, x1, z1, .12, { mat: 'pavement', t: .3, collide: false });
   // kerbs (concrete edge strips) along the raised areas
   const kerb = (x0, z0, x1, z1) => B.box((x0 + x1) / 2, 0, (z0 + z1) / 2, Math.abs(x1 - x0) || .15, .14, Math.abs(z1 - z0) || .15, { mat: 'p_concrete_precast', collide: false });
   kerb(-28, -54, 8, -54); kerb(8, -18, 48.15, -18); kerb(-8, -50, -8, -14.15); kerb(8, -50, 8, -18); kerb(-28, -50, -28, -14.15); kerb(-48, -54, -48, -14.15);
@@ -512,6 +520,22 @@ function skylineAll(B) {
 
 // =============================================================================================================== dressing
 // rotations: the front of a prop faces +z at ry 0; FX = front +x, BX = front -x, SZ = front -z
+/** A view of the builder whose geometry calls default to cast: false (the index of each method's options argument). */
+const OPT_ARG = { box: 6, boxc: 6, floor: 5, wall: 4, room: 0, stairs: 0, ramp: 0, cyl: 5, mesh: 1, prop: 4 };
+function indoor(B) {
+  return new Proxy(B, {
+    get(t, k) {
+      if (k === 'noCast') return true;
+      const v = t[k];
+      if (typeof v !== 'function') return v;
+      const ai = OPT_ARG[k];
+      if (ai === undefined) return v.bind(t);
+      // props: merged rather than thin-instanced (B.instance has no cast flag, and merged copies add no draw calls)
+      const add = k === 'prop' ? { cast: false, inst: false } : { cast: false };
+      return (...a) => { const o = a[ai]; if (o == null) a[ai] = add; else if (typeof o === 'object') a[ai] = Object.assign({}, add, o); return v.apply(t, a); };
+    },
+  });
+}
 const FX = Math.PI / 2, BX = -Math.PI / 2, SZ = Math.PI;
 const pr = (B, type, x, y, z, o = {}) => B.prop(type, x, y, z, o);
 /** overhead duct / cable tray / pipe run (visual, no collider): along x or z at height y */
@@ -521,8 +545,20 @@ function run(B, x0, z0, x1, z1, y, w = .4, h = .3, mat = 'p_galv') {
   // hangers every 2.4 m
   for (let f = 1.2; f < L; f += 2.4) { const x = x0 + (x1 - x0) * f / L, z = z0 + (z1 - z0) * f / L; B.box(x, y + h, z, .03, .35, .03, { mat: 'p_galv', collide: false, cast: false }); }
 }
-function dress(B) {
-  dressGround(B); dressFirst(B); dressBasement(B); dressGarage(B); dressOutside(B); signage(B);
+/** mobile lead radiation screen (1.0 x 1.9 m panel with a viewing window on a castored base; full-height cover) */
+function leadScreen(B, x, y, z, ry) {
+  B.push(x, y, z, ry);
+  B.box(0, .1, 0, .7, .06, .6, { mat: 'p_paint_darkgrey', collide: false });
+  for (const sx of [-.3, .3]) for (const sz of [-.25, .25]) B.cyl(sx, 0, sz, .05, .1, { mat: 'rubber', sides: 8, collide: false });
+  B.box(0, .16, 0, 1.0, 1.74, .07, { mat: 'p_coat_white', collide: true, surf: 'metal' });
+  B.box(0, 1.3, 0, .5, .3, .08, { mat: 'p_glass_tint', collide: false });
+  B.box(0, 1.9, 0, 1.04, .04, .1, { mat: 'p_alu', collide: false });
+  B.box(-.53, .16, 0, .04, 1.78, .1, { mat: 'p_alu', collide: false }); B.box(.53, .16, 0, .04, 1.78, .1, { mat: 'p_alu', collide: false });
+  B.box(0, .75, .045, .12, .12, .01, { mat: 'p_coat_yellow', collide: false });   // radiation label
+  B.pop();
+}
+function dress(B, I) {
+  dressGround(I); dressFirst(I); dressBasement(I); dressGarage(I); dressOutside(B); signage(B);
 }
 
 function dressGround(B) {
@@ -653,6 +689,10 @@ function dressFirst(B) {
   P(B, 'medshelf', -47.6, y, 22.5, { ry: FX, len: 2, sparse: true }); P(B, 'medshelf', -47.6, y, 26.5, { ry: FX, len: 2 });
   pr(B, 'wardrobe', -47.25, y, 18.2, { ry: FX, variant: 'large', open: true, mat: 'p_stainless' });
   P(B, 'debris', -35, y, 28);
+  // site cover: mobile lead screens, a parked gurney, a crash cart and boxed stock left behind by the move-out
+  leadScreen(B, -35.2, y, 18.4, .3); leadScreen(B, -44.6, y, 28.5, -.25);
+  pr(B, 'gurney', -34.5, y, 26.6, { ry: .45 }); pr(B, 'medical_cart', -45.9, y, 19.9, { ry: FX, variant: 'red' });
+  pr(B, 'cardboard_box', -33.3, y, 29.1, { variant: 'pile', n: 4 }); pr(B, 'cardboard_box', -46.9, y, 24.6, { variant: 'pile', n: 3 });
   fixtures(B, -48, 16, -32, 30, C, { dx: 4, dz: 3.5, kind: 'troffer', on: .6 });
   // recovery: beds round the walls
   for (const z of [13, 16, 19, 27.6]) { pr(B, 'hospital_bed', -17.3, y, z, { ry: BX }); P(B, 'bedhead', -16.15, y, z, { ry: BX }); }
@@ -697,6 +737,13 @@ function dressBasement(B) {
   P(B, 'fridge3', -5, y, 38.95, { ry: SZ }); P(B, 'fridge3', -2.25, y, 38.95, { ry: SZ });
   P(B, 'pmtable', -10.8, y, 36.5); P(B, 'trolley', 3.2, y, 31, { ry: FX });
   P(B, 'sharps', -11.8, y + 1.1, 31.5, { ry: FX }); P(B, 'gel', 3.85, y, 34, { ry: BX });
+  // the dissection bench along the west wall: stainless worktop and sink, wall cabinets, a floor drain channel, ducts overhead
+  B.box(-11.45, y, 33.9, .7, .9, 2.6, { mat: 'p_stainless', surf: 'metal' });
+  B.box(-11.45, y + .7, 34.4, .5, .2, .6, { mat: 'p_chrome', collide: false, skip: 'b' });
+  B.box(-11.7, y + 1.55, 33.9, .36, .7, 2.6, { mat: 'p_coat_white', collide: false });
+  for (const z of [32.95, 33.9, 34.85]) B.box(-11.51, y + 1.6, z, .01, .6, .03, { mat: 'p_plastic_dark', collide: false });
+  B.box(-4, y + .005, 31.3, 14, .01, .22, { mat: 'p_galv', collide: false, cast: false });
+  run(B, -11.6, 39.4, 3.6, 39.4, C - .5, .5, .32); run(B, 3.5, 30.4, 3.5, 39.4, C - .25, .2, .2, 'p_paint_cream');
   fixtures(B, -12, 30, 4, 40, C, { dx: 4, dz: 3.5, kind: 'strip', on: .55 });
   // corridors: ducts and cable trays under the ceiling, parked trolleys
   run(B, -46, 28.9, -12.2, 28.9, C - .45, .6, .35); run(B, -46, 27.0, -12.2, 27.0, C - .2, .35, .06, 'p_paint_darkgrey');

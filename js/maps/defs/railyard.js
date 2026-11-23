@@ -78,6 +78,15 @@ function wainscotZ(B, z0, z1, x, y, mat, face) {
   B.box(x + d * 0.02, y, (z0 + z1) / 2, 0.03, 0.12, z1 - z0, { mat: 'paint_black', collide: false, cast: false });
 }
 const lamp = (B, x, y, z, o = {}) => B.light(Object.assign({ x, y, z, intensity: 14, color: [1, 0.86, 0.66], fixture: 'tube' }, o));
+/** steel workbench along x (len m, 0.9 m deep, top at 0.92): legs, a lower shelf, a timber top, a vice on the east end */
+function bench(B, x, y, z, len) {
+  for (const dx of [-len / 2 + 0.08, len / 2 - 0.08]) for (const dz of [-0.36, 0.36]) B.box(x + dx, y, z + dz, 0.06, 0.88, 0.06, { mat: 'steel_dark', collide: false });
+  B.box(x, y + 0.18, z, len - 0.1, 0.03, 0.8, { mat: 'metal_plate', collide: false });
+  B.box(x, y + 0.86, z, len, 0.06, 0.88, { mat: 'paint_blue', collide: false });
+  B.box(x, y + 0.88, z, len + 0.04, 0.05, 0.92, { mat: 'wood_dark', collide: false });
+  B.box(x + len / 2 - 0.3, y + 0.93, z + 0.3, 0.18, 0.14, 0.24, { mat: 'paint_blue', collide: false });
+  B.collider({ cx: x, cy: y + 0.47, cz: z, hx: len / 2, hy: 0.47, hz: 0.46, surf: 'metal' });
+}
 
 export default {
   id: 'railyard', name: 'Switchback Yard', size: 'L',
@@ -85,7 +94,7 @@ export default {
   env: { time: 'night', weather: 'rain', exposure: 1.15, ambient: [0.05, 0.05, 0.065], fog: { color: [0.08, 0.075, 0.08], density: 0.011 },
     sun: { dir: [0.35, -1, 0.25], color: [0.55, 0.62, 0.85], intensity: 0.6 }, puddles: 0.8, wind: [1.5, -0.8], ambience: 'railyard', reverb: 'outdoor' },
   bounds: { minX: -98, maxX: 98, minZ: -84, maxZ: 88, minY: -3, maxY: 30 },
-  chunk: 64,
+  chunk: 100,
 
   build(B) {
     // ================================================================ ground (the engine house floor is its own slab: pits)
@@ -201,6 +210,9 @@ export default {
       B.prop('lockers', -25.4, FL, -71.5, { ry: HP, n: 4, variant: 'blue' });
       B.prop('dining_table', -16.5, FL, -78.6, { variant: 'set', chairs: 4, w: 2.2 });
       B.prop('vending_machine', -9.0, FL, -80.9, { variant: 'drinks', ry: 0 });
+      B.prop('kitchen_counter', -22.6, FL, -81.45, { variant: 'grey', len: 3.0, sink: 1 }); B.prop('fridge', -20.5, FL, -81.4, {});
+      B.prop('dining_table', -11.5, FL, -78.4, { variant: 'set', chairs: 4, w: 1.6 });
+      B.prop('wheelie_bin', -24.6, FL, -69.0, { variant: 'grey' });
       B.prop('whiteboard', -16.5, FL + 1.0, -81.82, { w: 2.4 });
       B.prop('wall_clock', -12, FL + 2.5, -81.82, {});
       B.prop('fire_extinguisher', -8.3, FL, -70, { ry: -HP });
@@ -238,7 +250,7 @@ export default {
         { c: -4, w: 2.8, h: 2.9, y: FL, frame: 'steel_dark' }, { c: 3.5, w: 2.8, h: 2.9, y: FL, frame: 'steel_dark' },
         { c: 16, w: 1.0, h: 2.15, y: FL, frame: 'wood_dark' }, { c: 11, w: 1.3, h: 1.2, y: FL + 1.0, frame: 'wood_dark', glass: true }, { c: 21, w: 1.3, h: 1.2, y: FL + 1.0, frame: 'wood_dark', glass: true }] });
       wallX(B, x0, x1, z1, { h: h + FL, n: 'wood_siding', s: 'plaster', end: 'wood_siding' });
-      wallZ(B, z0 + 0.15, z1 - 0.15, x0, { h: h + FL, w: 'wood_siding', e: 'plaster' });
+      wallZ(B, z0 + 0.15, z1 - 0.15, x0, { h: h + FL, w: 'wood_siding', e: 'plaster', ops: [{ c: 71.5, w: 2.6, h: 2.9, y: FL, frame: 'steel_dark' }] });   // west gate (to A)
       wallZ(B, z0 + 0.15, z1 - 0.15, x1, { h: h + FL, w: 'plaster', e: 'wood_siding', ops: [{ c: 70, w: 1.0, h: 2.15, y: FL, frame: 'wood_dark' }] });
       // common room (lobby) | corridor + bunk rooms + washroom
       wallZ(B, z0 + 0.15, z1 - 0.15, 8, { h: h, y: FL, w: 'plaster', e: 'plaster', t: 0.2 });
@@ -252,7 +264,7 @@ export default {
       // wainscot (dark timber to 1.2 m) and a rag rug; a bookshelf and a notice board by the doors
       for (const [a, b] of [[-9.85, -5.45], [-2.55, 2.05], [4.95, 7.9]]) wainscot(B, a, b, 64.17, FL, 'wood_dark', 'n');
       wainscot(B, -9.85, 7.9, 79.83, FL, 'wood_dark', 's');
-      wainscotZ(B, 64.15, 79.85, -9.83, FL, 'wood_dark', 'e'); wainscotZ(B, 64.15, 79.85, 7.88, FL, 'wood_dark', 'w');
+      wainscotZ(B, 64.15, 70.2, -9.83, FL, 'wood_dark', 'e'); wainscotZ(B, 72.8, 79.85, -9.83, FL, 'wood_dark', 'e'); wainscotZ(B, 64.15, 79.85, 7.88, FL, 'wood_dark', 'w');
       B.prop('rug', -6.5, FL + 0.01, 76.2, { variant: 'red', w: 2.2, d: 3.0, ry: HP });
       B.prop('bookshelf', -9.6, FL, 69.5, { variant: 'walnut', ry: HP, w: 1.2 });
       B.prop('whiteboard', 0.2, FL + 1.0, 64.18, { w: 2.0 });
@@ -271,8 +283,8 @@ export default {
       B.prop('bed', 18.2, FL, 78.4, { variant: 'bunk', ry: HP }); B.prop('bed', 22.5, FL, 76.4, { variant: 'bunk', ry: -HP });
       B.prop('toilet_stall', 13.0, FL, 65.25, { n: 3, ry: 0 }); B.prop('sink', 18.6, FL, 64.45, { n: 2 });
       B.hide(15.3, FL, 74.0, { kind: 'closet', r: 0.6 }); B.hide(18.2, FL, 78.4, { kind: 'under', r: 0.7 });
-      lamp(B, 16, FL + h, 68.5, { intensity: 6, flicker: 0.4 });
-      B.lobby(2, { x0: -9.75, z0: 64.3, x1: 7.8, z1: 79.7, y: FL }, [{ x: -4, z: 64, w: 2.8, h: 2.9, y: FL }, { x: 3.5, z: 64, w: 2.8, h: 2.9, y: FL }]);
+      B.prop('light_fixture', 16, FL + h, 68.5, { variant: 'troffer' });
+      B.lobby(2, { x0: -9.75, z0: 64.3, x1: 7.8, z1: 79.7, y: FL }, [{ x: -4, z: 64, w: 2.8, h: 2.9, y: FL }, { x: 3.5, z: 64, w: 2.8, h: 2.9, y: FL }, { x: -10, z: 71.5, w: 2.6, h: 2.9, y: FL, ry: Math.PI / 2 }]);
       for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) B.spawn(2, -7.2 + i * 2.6, FL, 66.6 + j * 2.2, PI);
     }
 
@@ -334,7 +346,8 @@ export default {
       B.prop('rack', -84, 0, 47.8, { bays: 2, levels: 2, lh: 1.5, load: 0.8 });
       B.hide(-86.4, 0, 39.6, { kind: 'dark', r: 0.7 });
       // floor dressing: workbenches, a wheelset on stands, drums, pallets, a forklift, the sand pipes over road 3
-      B.box(-70, 0, 52.9, 6, 0.9, 0.8, { mat: 'steel_dark' }); B.box(-70, 0.9, 52.9, 6.1, 0.05, 0.85, { mat: 'wood_dark' });
+      bench(B, -71.5, 0, 52.95, 3); bench(B, -67.9, 0, 52.95, 3);
+      B.prop('cardboard_box', -72.2, 0.93, 53.0, { variant: 'small', ry: 0.3 }); B.prop('scan_tyre', -65.6, 0, 53.1, { ry: 0.1 });
       B.prop('shelf_unit', -63.5, 0, 53.2, { variant: 'grey' }); B.prop('gas_cylinder', -61.2, 0, 53.3, { rack: true, ry: PI });
       wheelset(B, -64, 0, 49.6, { ry: 0 }); wheelset(B, -61, 0, 49.6, { ry: 0 });
       B.prop('pallet', -56.5, 0, 46.2, { variant: 'drums', ry: 0.2 }); B.prop('pallet', -56.4, 0, 51.6, { variant: 'boxes', stack: 2 });
@@ -346,6 +359,12 @@ export default {
       lamp(B, -60, H - 2.2, 45.5, { intensity: 34, fixture: false, type: 'spot', angle: 1.5, range: 18 });
       lamp(B, -73, H - 2.2, 47.5, { intensity: 26, fixture: false, type: 'spot', angle: 1.5, range: 18 });
       for (const x of [-72, -64]) B.prop('light_fixture', x, H - 0.75, 38.5, { variant: 'highbay', drop: 1.2 });
+      // wall packs over the outside doors (the back door one is lit: the defenders' way in)
+      for (const [x, y, z, d] of [[-74, 3.75, 54.0, 1], [-60, 2.55, 54.0, 1], [-80, 2.55, 30.0, -1], [-68, 3.95, 30.0, -1]]) {
+        B.box(x, y, z + d * 0.1, 0.36, 0.26, 0.2, { mat: 'steel_dark', collide: false });
+        B.box(x, y + 0.02, z + d * 0.205, 0.26, 0.14, 0.02, { mat: 'emissive_warm', collide: false, cast: false });
+      }
+      lamp(B, -74, 3.6, 54.6, { intensity: 9, fixture: false, range: 9 });
       sign(B, 'siteA', -55.5, 3.8, 53.68, 1.6, 1.6, { face: 's' });
       sign(B, 'siteA', x0 + t + 0.02, 2.0, 44, 1.4, 1.4, { face: 'e' });
       sign(B, 'blue', -56.4, 1.6, 30.53, 0.8, 0.4, { face: 'n' });
@@ -360,7 +379,10 @@ export default {
       wallZ(B, wz0 + 0.15, z0, x0 + 0.15, { h: wh, t: 0.3, w: 'corrugated', e: 'concrete_panels', ops: [{ c: 26, w: 1.1, h: 2.2, y: FL, frame: 'steel_dark' }] });
       wallZ(B, wz0 + 0.15, z0, -62.15, { h: wh, t: 0.3, w: 'concrete_panels', e: 'corrugated', ops: [{ c: 26, w: 2.0, h: 1.0, y: 2.0, frame: 'steel_dark', glass: true }] });
       B.box(-75, wh, 26, 26.4, 0.25, 8.6, { mat: 'corrugated', mats: { b: 'steel_dark' } });
-      B.box(-75.8, 0, 29.3, 4, 0.92, 0.9, { mat: 'steel_dark' }); B.box(-75.8, 0.92, 29.3, 4.1, 0.06, 0.95, { mat: 'wood_dark' });
+      bench(B, -75.8, FL, 29.4, 4);
+      B.prop('crate_plastic', -77, FL + 0.93, 29.4, { variant: 'red' }); B.prop('cardboard_box', -74.6, FL + 0.93, 29.5, { variant: 'small', ry: -0.2 });
+      B.prop('scan_steel_shelves', -84.6, FL, 29.6, { ry: PI }); B.prop('scan_tyre', -82.3, FL, 29.5, { ry: 0.4 }); B.prop('scan_tyre', -82.4, FL, 28.9, { ry: 0.5 });
+      B.prop('scan_barrel_red', -71.0, FL, 23.0, {}); B.prop('scan_trashbag', -66.0, FL, 29.4, {});
       B.box(-86.5, 0, 26.5, 1.2, 1.6, 0.9, { mat: 'paint_green' });       // pillar drill / cabinet
       B.prop('shelf_unit', -63.2, FL, 23.0, { variant: 'grey' }); B.prop('shelf_unit', -64.6, FL, 23.0, { variant: 'grey' });
       B.prop('gas_cylinder', -71.5, FL, 29.4, { n: 3, variant: 'oxygen' }); B.prop('generator', -84.0, FL, 23.4, { variant: 'portable' });
@@ -597,7 +619,7 @@ export default {
       B.hide(39.2, 0, 67, { kind: 'car', r: 0.6 }); B.hide(34, 0, 73.5, { kind: 'car', r: 0.6 });
       B.prop('street_light', 26, 0, 61, { ry: PI });
       for (const x of [-30, -60]) B.prop('utility_pole', x, 0, 64, { variant: 'wood', ry: HP, span: 30 });
-      B.prop('bush', -14, 0, 70, { variant: 'round' }); B.hide(-14, 0, 70, { kind: 'bush' });
+      B.prop('bush', -14.5, 0, 77, { variant: 'round' }); B.hide(-14.5, 0, 77, { kind: 'bush' });
       B.prop('bush', 26.5, 0, 82, { variant: 'shrub' });
       // A back yard: sand / coal bunkers (concrete bays), wheel stacks, a lube store
       for (let i = 0; i < 3; i++) { B.box(-84 + i * 6, 0, 70, 0.4, 2.2, 8, { mat: 'concrete' }); }
@@ -611,6 +633,32 @@ export default {
       // tank farm north: a vertical tank, pipe rack
       B.prop('tank', 80, 0, 72, { variant: 'medium', r: 4.5, h: 8 }); B.prop('pipe', 66, 0, 66, { ry: HP, len: 24, d: 0.3, h: 1.6, variant: 'grey' });
       B.prop('generator', 58, 0, 74, { variant: 'yellow' });
+    }
+
+    // ================================================================ grime and litter (oil, damp, rust runs; bags, tyres, relay cabinets)
+    {
+      const oil = (x, y, z, w, i = 0, ry = 0) => sign(B, 'oil' + (i % 4), x, y + 0.012, z, w, w * 0.8, { face: 'u', stain: true, ry });
+      // engine house floor and apron
+      [[-68, 47.6, 1.6], [-58.5, 49.6, 1.3], [-82, 44.5, 1.2], [-60.5, 38.4, 1.0], [-74, 38.5, 1.4], [-55, 45, 0.9]].forEach(([x, z, w], i) => oil(x, 0, z, w, i, i));
+      [[-46, 34, 1.8], [-40, 40.5, 1.4], [-34, 47, 2.0], [-49, 52, 1.2]].forEach(([x, z, w], i) => oil(x, 0.02, z, w, i + 1, i * 0.7));
+      // fuel platform and pad (diesel drips at the cranes)
+      [55, 63, 71, 79].forEach((x, i) => oil(x + 0.4, 0.32, 31.4, 1.1, i, i));
+      [[52, 21.5, 2.0], [74, 21.2, 1.6], [86, 30, 2.2]].forEach(([x, z, w], i) => oil(x, 0.02, z, w, i + 2, i));
+      // rust blooms under the bunded tanks, damp patches on the roads
+      for (const [x, z] of [[61, 42.6], [77, 42.6], [61, 49.6], [77, 49.6]]) sign(B, 'rust', x, 0.07, z, 7, 3.0, { face: 'u', stain: true });
+      for (const [x, z, w] of [[-30, -46, 6], [38, -45, 5], [-20, 59, 5], [58, 59.5, 6], [-93, 20, 4], [93, -10, 4]]) sign(B, 'wet', x, 0.035, z, w, w * 0.7, { face: 'u', stain: true });
+      // rust / rain runs under the engine house high windows (north side) and the yard office upper windows
+      for (const x of [-84, -67, -56]) sign(B, 'streak', x, 3.9, 54.03, 2.8, 2.6, { face: 'n', stain: true });
+      for (const x of [-20, -13, -5]) sign(B, 'streak', x, 3.75, -67.82, 2.2, 1.6, { face: 'n', stain: true });
+      // litter: bin bags by the dumpsters, tyres, cement sacks, cans by the bunkhouse back door
+      for (const [x, z, r] of [[3.4, -65.2, 0.3], [1.9, -65.5, 1.2], [-82.4, -57.0, 0.6], [-85.6, 20.9, 2.0]]) B.prop('scan_trashbag', x, 0, z, { ry: r });
+      for (const [x, z, r] of [[-60, -60.3, 0.2], [-59.3, -61.0, 1.4], [77, -17, 0.9], [-30, -58.5, 0.4]]) B.prop('scan_tyre', x, 0, z, { ry: r });
+      for (const [x, z, r] of [[-58.3, 12.4, 0.2], [-57.8, 13.1, 1.7], [-58.9, 13.3, 0.9]]) B.prop('cardboard_box', x, 0, z, { variant: 'flat', ry: r });
+      B.prop('wheelie_bin', 25.0, 0, 74.0, { variant: 'grey', ry: -HP }); B.prop('wheelie_bin', 25.0, 0, 75.0, { variant: 'green', ry: -HP });
+      B.prop('drum', 45.0, 0, 47.0, { n: 2, variant: 'blue' });
+      B.prop('crate_plastic', 82.5, 0.32, 31.0, { variant: 'yellow', ry: 0.3 });
+      // relay cabinets (signalling) at the throats and the tower
+      for (const [x, z, r] of [[-51.5, -40.2, 0], [-50.5, 21.2, PI], [51.5, -40.2, 0], [-54.2, -5.2, -HP], [88.3, 24, -HP]]) B.prop('scan_utility_box', x, 0, z, { ry: r });
     }
 
     // ================================================================ objectives

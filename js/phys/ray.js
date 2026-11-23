@@ -8,6 +8,7 @@
      raycastAll(world, origin, dir, maxDist, opts?) -> [{ dist, point, normal, surf, id, exitDist }] sorted by dist
          every collider crossed (for penetration: thickness = exitDist - dist; heightfields: exitDist = Infinity).
      segmentClear(world, ax, ay, az, bx, by, bz, opts?) -> bool    no ray-blocking collider between the two points
+         (opts.solid: movement-solid colliders instead, e.g. rails that bullets pass through)
    Boxes use a slab test in their local (Y-rotated) space, ramps a convex half-space clip, cylinders the analytic
    quadratic, heightfields a march (half a cell) refined by bisection. */
 
@@ -160,6 +161,8 @@ function ignored(opts, c) {
 }
 
 const _stack = new Int32Array(256);
+let SOLIDQ = false;   // segmentClear(..., { solid: true }): test movement-solid colliders (navgrid) instead of ray-blocking ones
+const hits = c => c.alive && (SOLIDQ ? c.solid : c.ray);
 
 /** Visit every BVH leaf collider whose node the ray crosses within tmax(); visit(c) may lower the limit through limit.t. */
 function traverse(world, ox, oy, oz, dx, dy, dz, limit, visit) {
@@ -178,12 +181,12 @@ function traverse(world, ox, oy, oz, dx, dy, dz, limit, visit) {
       const l = world.nLeft[n];
       if (l < 0) {
         const s0 = world.nStart[n], e0 = s0 + world.nCount[n];
-        for (let k = s0; k < e0; k++) { const c = cols[world.items[k]]; if (c.alive && c.ray) visit(c); }
+        for (let k = s0; k < e0; k++) { const c = cols[world.items[k]]; if (hits(c)) visit(c); }
       } else { _stack[sp++] = world.nRight[n]; _stack[sp++] = l; }
     }
   }
-  if (world.built) { for (let k = 0; k < world.extra.length; k++) { const c = cols[world.extra[k]]; if (c.alive && c.ray) visit(c); } }
-  else for (let k = 0; k < cols.length; k++) { const c = cols[k]; if (c.alive && c.ray) visit(c); }
+  if (world.built) { for (let k = 0; k < world.extra.length; k++) { const c = cols[world.extra[k]]; if (hits(c)) visit(c); } }
+  else for (let k = 0; k < cols.length; k++) { const c = cols[k]; if (hits(c)) visit(c); }
 }
 
 const LIM = { t: 0 };
@@ -256,5 +259,6 @@ export function segmentClear(world, ax, ay, az, bx, by, bz, opts) {
   SEG_O.x = ax; SEG_O.y = ay; SEG_O.z = az; SEG_D.x = dx / L; SEG_D.y = dy / L; SEG_D.z = dz / L;
   SEG_OPTS.ignore = opts && opts.ignore != null ? opts.ignore : null; SEG_OPTS.skipGlass = !!(opts && opts.skipGlass);
   SEG_OPTS.tag = opts && opts.tag != null ? opts.tag : null; SEG_OPTS.skipTag = opts && opts.skipTag != null ? opts.skipTag : null;
-  return !raycast(world, SEG_O, SEG_D, L, SEG_OPTS).hit;
+  SOLIDQ = !!(opts && opts.solid);
+  try { return !raycast(world, SEG_O, SEG_D, L, SEG_OPTS).hit; } finally { SOLIDQ = false; }
 }

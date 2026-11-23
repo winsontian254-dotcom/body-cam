@@ -27,6 +27,7 @@ const LINK_NAMES = ['walk', 'drop', 'mantle'];
 const F_STAND = 1, F_CROUCH = 2, F_GATE = 4, F_TINY = 8;
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 const MAXL = 8;   // levels kept per cell
+const SOLID = { solid: true };   // ledge tests use movement colliders (a rail bullets pass through still stops a body)
 
 class Heap {
   constructor(n) { this.a = new Int32Array(Math.max(16, n)); this.f = null; this.n = 0; }
@@ -210,9 +211,13 @@ export function buildNav(world, bounds, opts = {}) {
         if (low < 0) { if (levelIn(cj, y, step) >= 0) break; continue; }
         // the drop is clear: nothing solid between the ledge and the landing at body height
         const x0 = minX + (i + 0.5) * cell, z0 = minZ + (j + 0.5) * cell, x1 = minX + (ii + 0.5) * cell, z1 = minZ + (jj + 0.5) * cell;
-        if (!segmentClear(world, x0, y + 0.9, z0, x1, y + 0.9, z1)) break;
+        if (!segmentClear(world, x0, y + 0.9, z0, x1, y + 0.9, z1, SOLID)) break;
         spFrom.push(n); spTo.push(low); spType.push(NAV_LINK.DROP);
-        if (ld <= mantle && !segmentClear(world, x1, nY[low] + 0.2, z1, x0, nY[low] + 0.2, z0) && segmentClear(world, x1, y + 0.9, z1, x0, y + 0.9, z0)) {
+        // a mantle needs a ledge face to climb (solid at knee height) and a clear top: nothing solid at 0.4 / 0.9 / 1.3 m over the ledge
+        // (a railing along a stair void blocks it)
+        if (ld <= mantle && !segmentClear(world, x1, nY[low] + 0.2, z1, x0, nY[low] + 0.2, z0, SOLID)
+            && segmentClear(world, x1, y + 0.4, z1, x0, y + 0.4, z0, SOLID) && segmentClear(world, x1, y + 0.9, z1, x0, y + 0.9, z0, SOLID)
+            && segmentClear(world, x1, y + 1.3, z1, x0, y + 1.3, z0, SOLID)) {
           spFrom.push(low); spTo.push(n); spType.push(NAV_LINK.MANTLE);
         }
         break;
@@ -421,8 +426,8 @@ class Nav {
       // corner cut through a diagonal: both orthogonal cells must be walkable too
       cur = nxt; y = this.nY[cur]; lastCell = ci;
     }
-    void y;
-    return true;
+    // the line must end on the destination's floor (two floors share a cell column: stairs, mezzanines)
+    return Math.abs(y - b.y) <= this.step + 0.3;
   }
   _smooth(pts) {
     if (pts.length <= 2) return pts;

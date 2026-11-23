@@ -270,7 +270,7 @@ function tractor(K, o, v, rnd) {
   K.cyl('steel_dark', 0, 1.0, -1.3, .9, .1, { seg: 16 }); K.box('steel_dark', 0, 1.05, -1.9, .3, .06, 1.0);
   for (const s of [-1, 1]) { wheel(K, s * (W / 2 - .3), .52, hl - .95, .52, { side: s, w: .32, rimMat: 'p_alu', spokes: 0 }); for (const z of [-1.1, -2.45]) wheel(K, s * (W / 2 - .3), .52, z, .52, { side: s, w: .55, rimMat: 'p_alu', spokes: 0 }); }
   K.col(0, .15, hl - 1.1, W, 3.25, 2.2, { surf: 'sheetmetal' });
-  K.col(0, .3, -1.3, W, .9, 3.4, { surf: 'metal' });
+  K.col(0, .3, -1.05, W, .9, 3.9, { surf: 'metal' });   // chassis, up to the cab (no gap a body can wedge into)
 }
 function trailer(K, o, v, rnd) {
   const L = 13.6, W = 2.55, hl = L / 2, deck = 1.3, flat = v === 'flat';

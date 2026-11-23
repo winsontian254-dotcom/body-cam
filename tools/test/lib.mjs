@@ -28,4 +28,4 @@ export async function openGame(browser, base, hash = '', { width = 960, height =
   return { page, errs };
 }
 export const waitFor = (page, expr, timeout = 60000) => page.waitForFunction(expr, null, { timeout, polling: 250 });
-export async function shot(page, name, opts = {}) { const f = path.join(OUT, name.endsWith('.png') ? name : name + '.png'); await page.screenshot({ path: f, ...opts }); return f; }
+export async function shot(page, name, opts = {}) { const f = path.join(OUT, name.endsWith('.png') ? name : name + '.png'); await page.screenshot({ path: f, timeout: 180000, ...opts }); return f; }

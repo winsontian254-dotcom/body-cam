@@ -15,8 +15,8 @@ const PI = Math.PI;
 export default {
   id: 'tower', name: 'Meridian Tower', size: 'M',
   desc: 'Levels 31-32 of a downtown office tower at night: server room, executive suite, atrium, two fire stairs.',
-  env: { hdri: 'night_city', sky: 'night', time: 'night', exposure: 1.0, ambient: [2.4, 2.5, 2.8], fog: { color: [0.035, 0.032, 0.03], density: 0.0014 },
-    indoorIbl: .5, weather: 'clear', ambience: 'office', reverb: 'room' },
+  env: { hdri: 'night_city', sky: 'night', time: 'night', exposure: 1.2, ambient: [2.8, 2.9, 3.2], fog: { color: [0.035, 0.032, 0.03], density: 0.0014 },
+    indoorIbl: .5, sun: { intensity: 0 }, weather: 'clear', ambience: 'office', reverb: 'room' },
   bounds: { minX: -46.5, maxX: 46.5, minZ: -20.5, maxZ: 20.5, minY: -1, maxY: 11 },
 
   build(B) {
@@ -233,6 +233,15 @@ export default {
     sign(B, 'map', -36.02, 1.4, 2.6, 0.5, 0.38, -PI / 2);
     for (const z of [-5.86, 5.86]) for (const [a, b] of [[-42.55, -40.6], [-37.9, -36.05]]) for (const yy of [0.3, 0.9]) box((a + b) / 2, yy, z, b - a, 0.14, 0.05, { mat: 'p_wood_pallet', collide: false });
     for (const yy of [0.3, 0.9]) box(-36.05, yy, 0, 0.05, 0.14, 11.7, { mat: 'p_wood_pallet', collide: false });
+    // staging dressing: kit lockers, steel shelving, the hazard strip at the car sill, notices, a clock, a cable tray
+    P('lockers', -41.6, 0, -5.62, { variant: 'blue', n: 4, open: [2] }); P('lockers', -37.0, 0, -5.62, { variant: 'grey', n: 2 });
+    P('scan_steel_shelves', -41.6, 0, 5.6, { ry: PI }); P('scan_plastic_crate', -41.9, 1.02, 5.62, { ry: PI });
+    box(-42.45, 0.002, -3, 0.3, 0.008, 2.8, { mat: 'hazard', collide: false, cast: false });
+    P('scan_wet_floor_sign', -42.0, 0, -1.2, { ry: 0.6 });
+    P('whiteboard', -36.03, 1.0, -2.8, { ry: -PI / 2, w: 1.2 }); P('poster', -36.02, 1.2, 4.2, { ry: -PI / 2, i: 2 }); P('poster', -36.02, 1.2, 4.9, { ry: -PI / 2, variant: 'flyer', i: 4 });
+    P('wall_clock', -36.02, 2.45, -0.4, { ry: -PI / 2, variant: 'black' });
+    box(-39.2, 2.62, 4.6, 6.4, 0.06, 0.4, { mat: 'grate', collide: false, cast: false });
+    for (const x of [-42.2, -39.2, -36.4]) box(x, 2.68, 4.6, 0.03, 0.22, 0.03, { mat: 'p_galv', collide: false, cast: false });
 
     // ---- west service lobby (between the freight hall and stair A)
     w31(-35.8, 6, -18, 6, { mat2: 'tw_wall', openings: [{ at: 5.8, w: 2.4, h: 2.4 }, { at: 13.3, w: 1.8, h: 2.15, leaf: { v: 'double', open: 95 } }] });
@@ -274,10 +283,10 @@ export default {
     P('rack', -40.5, 0, -17.9, { bays: 3, levels: 2, load: .7, lh: 1.2 });
     for (const [x, z, ry] of [[-34, -10, 0], [-31.5, -10.5, 0.2], [-34.5, -14.5, 0.1], [-28.5, -15.5, -0.15]]) P('pallet', x, 0, z, { variant: 'boxes', ry, h: 1.0 });
     P('server_rack', -26.0, 0, -9.0, { n: 2, on: false }); P('server_rack', -23.2, 0, -10.6, { n: 1, on: false, ry: 0.5 });
-    P('pallet_jack', -24.5, 0, -12.5, { ry: 1.0 }); P('cardboard_box', -38.0, 0, -8.0, { variant: 'pile', n: 6 }); P('cardboard_box', -21.0, 0, -18.4, { variant: 'pile', n: 5 });
+    P('pallet_jack', -24.5, 0, -12.5, { ry: 1.0 }); P('cardboard_box', -27.0, 0, -18.6, { variant: 'pile', n: 6 }); P('cardboard_box', -21.0, 0, -18.4, { variant: 'pile', n: 5 });
     P('crate_plastic', -35.2, 0, -16.8, { variant: 'blue', n: 4 }); P('crate_plastic', -34.5, 0, -16.8, { variant: 'blue', n: 3 });
     P('ibc_tank', -43.6, 0, -8.6, {}); P('drum', -44.4, 0, -10.2, { variant: 'blue', n: 2 });
-    B.hide(-33.0, 0, -15.6, { kind: 'crates', r: 0.6 }); B.hide(-37.6, 0, -9.2, { kind: 'crates', r: 0.6 });
+    B.hide(-33.0, 0, -15.6, { kind: 'crates', r: 0.6 }); B.hide(-42.6, 0, -10.4, { kind: 'crates', r: 0.5 });
     B.light({ x: -31, y: CH, z: -13, intensity: 8, fixture: 'tube', color: [0.95, 0.97, 1] });
     for (const [x, z] of [[-40, -10], [-40, -15.5], [-24, -16], [-24, -9]]) strip(B, x, CH, z);
 
@@ -287,9 +296,9 @@ export default {
     glassWall(B, 2, 14.5, 2, ZF - 0.5, { doors: [{ at: 2.5, w: 1.0, open: -90 }] });
     P('dining_table', -1, 0, 17.2, { variant: 'white', w: 2.4, chairs: 6 }); P('whiteboard', -3.93, 1.0, 17.0, { ry: PI / 2, w: 1.6 });
     const cluster = (cx, cz, y, v) => { for (const dx of [0, 1.82]) { P('cubicle', cx + dx, y, cz - 0.91, { variant: v, ry: PI }); P('cubicle', cx + dx, y, cz + 0.91, { variant: v === 'grey' ? 'blue' : 'grey', ry: 0 }); } };
-    cluster(-16, 9.8, 0, 'grey'); cluster(-11.6, 9.8, 0, 'blue'); cluster(-7.2, 9.8, 0, 'grey'); cluster(-16, 16.2, 0, 'beige'); cluster(-11.6, 16.2, 0, 'grey');
-    cluster(4.0, 9.8, 0, 'grey'); cluster(4.0, 16.2, 0, 'blue');
-    P('filing_cabinet', -17.65, 0, 7.4, { ry: PI / 2 }); P('filing_cabinet', -17.65, 0, 7.9, { ry: PI / 2, variant: '2' });
+    cluster(-16, 9.0, 0, 'grey'); cluster(-11.6, 9.0, 0, 'blue'); cluster(-7.2, 9.0, 0, 'grey'); cluster(-16, 16.2, 0, 'beige'); cluster(-11.6, 16.2, 0, 'grey');
+    cluster(4.0, 9.0, 0, 'grey'); cluster(4.0, 16.2, 0, 'blue');
+    P('filing_cabinet', -17.65, 0, 6.45, { ry: PI / 2 }); P('filing_cabinet', -17.65, 0, 6.95, { ry: PI / 2, variant: '2' });
     const copier = (x, y, z, ry) => B.frame(x, y, z, ry, () => { box(0, 0, 0, 1.1, 0.95, 0.7, { mat: 'p_plastic_beige' }); box(0, 0.95, 0.05, 1.0, 0.18, 0.55, { mat: 'p_plastic_grey' }); box(-0.3, 0.98, -0.3, 0.3, 0.03, 0.1, { mat: 'p_em_dim', collide: false }); box(0.2, 0.3, 0.36, 0.5, 0.25, 0.02, { mat: 'p_plastic_grey', collide: false }); });
     const cooler = (x, y, z) => { box(x, y, z, 0.32, 1.0, 0.32, { mat: 'plastic_white' }); B.cyl(x, y + 1.0, z, 0.14, 0.42, { mat: 'p_glass_tint', sides: 12, collide: false }); };
     copier(8.4, 0, 6.6, 0); cooler(9.4, 0, 18.6); copier(-17.2, L2, 7.6, PI / 2);
@@ -344,11 +353,12 @@ export default {
     // ---- south band: training room, atrium cafe, support open plan, staff kitchen
     w31(-18, -8.5, -8.5, -8.5, { openings: [{ at: 6, w: 1.0, h: 2.1, leaf: { v: 'wood', open: 95, flip: true } }] });
     w31(-8.5, -ZF, -8.5, -8.5, { openings: [{ at: 6.75, w: 1.6, h: 2.15, leaf: { v: 'double', open: 92 } }] });
-    for (let r = 0; r < 4; r++) for (const x of [-15.4, -12.2]) { P('dining_table', x, 0, -11.0 - r * 2.0, { variant: 'white', w: 2.4 }); for (const dx of [-0.7, 0.7]) P('chair', x + dx, 0, -11.6 - r * 2.0, { variant: 'plastic', ry: 0 }); }
+    for (let r = 0; r < 4; r++) for (const x of [-15.4, -12.2]) { P('desk', x, 0, -11.0 - r * 2.0, { variant: 'office', w: 2.4, ry: PI, items: r % 2 === 0 }); for (const dx of [-0.7, 0.7]) P('chair', x + dx, 0, -11.6 - r * 2.0, { variant: 'plastic', ry: 0 }); }
     P('whiteboard', -15.0, 1.0, -8.56, { w: 2.4, ry: PI }); P('tv', -10.2, 1.4, -8.56, { wall: true, on: true, ry: PI });
     P('dining_table', -9.4, 0, -10.6, { variant: 'white', w: 1.6, ry: PI / 2 }); P('dining_table', -9.4, 0.75, -10.6, { variant: 'white', w: 1.6, ry: PI / 2, collide: false });
     B.hide(-9.3, 0, -9.3, { kind: 'crates', r: 0.5 });
     sign(B, 'training', -12, 2.45, -8.43, 0.6, 0.15, 0);
+    P('wall_clock', -17.88, 2.2, -13.0, { ry: PI / 2, variant: 'black' }); P('poster', -17.88, 1.2, -16.5, { ry: PI / 2, i: 0 });
     // atrium (double height): cafe bar against the core, lounge seating, planters, the feature stair
     B.stairs({ x: 0, z: -11.85, w: 1.8, len: 6.7, y0: 0, y1: L2, dir: '+z', mat: 'tw_fascia', tread: 'tw_oak', rail: true, railMat: 'tw_alu' });
     P('bar_counter', -5.4, 0, -6.75, { len: 4.0, ry: PI }); P('back_bar', -5.4, 0, -5.24, { len: 4.0, ry: PI });
@@ -369,6 +379,8 @@ export default {
     P('vending_machine', 45.05, 0, -12.5, { ry: -PI / 2, variant: 'drinks' }); P('vending_machine', 45.05, 0, -11.5, { ry: -PI / 2, variant: 'snacks' });
     for (const [x, z] of [[34, -12], [34, -16], [38, -12], [38, -16]]) P('dining_table', x, 0, z, { variant: 'white', w: 1.6, chairs: 4 });
     sign(B, 'break', 38, 2.45, -7.93, 0.6, 0.15, 0);
+    P('wall_clock', 36.0, 2.2, -8.1, { ry: PI, variant: 'chrome' }); P('poster', 41.5, 1.3, -8.1, { ry: PI, i: 1 }); P('poster', 32.2, 1.2, -8.1, { ry: PI, variant: 'flyer', i: 3 });
+    P('scan_wet_floor_sign', 42.6, 0, -9.6, { ry: 2.2 });
     for (const [x, z] of [[34, -14], [40, -14], [43, -10.5]]) troffer(B, x, CH, z, true, true);
 
     // ================================================================== level 32
@@ -417,7 +429,7 @@ export default {
     glassWall(B, 10, 10.5, 10, ZF - 0.5, { y: L2, h: CH, doors: [{ at: 4.5, w: 1.0, open: 90 }] });
     glassWall(B, 28, 10.5, 28, ZF - 0.5, { y: L2, h: CH, doors: [{ at: 4.5, w: 1.0, open: -90 }] });
     for (const x of [16, 22]) w32(x, 10.56, x, 19.25, { openings: [{ at: 6.44, w: 1.0, h: 2.1, leaf: { v: 'wood', open: 90 } }] });
-    for (const x of [13, 19, 25]) P('dining_table', x, L2, 15.3, { variant: 'oak', w: 2.8, ry: PI / 2, chairs: 6 });
+    for (const x of [13, 19, 25]) { P('dining_table', x, L2, 15.3, { variant: 'oak', w: 2.8, ry: PI / 2, chairs: 0 }); for (const dz of [-0.9, 0, 0.9]) for (const e of [-1, 1]) P('office_chair', x + e * 0.78, L2, 15.3 + dz, { ry: e > 0 ? -PI / 2 : PI / 2, variant: 'charcoal' }); }
     P('tv', 15.93, L2 + 1.0, 14.2, { wall: true, on: false, ry: -PI / 2 }); P('tv', 21.93, L2 + 1.0, 14.2, { wall: true, on: true, ry: -PI / 2 }); P('tv', 22.07, L2 + 1.0, 14.2, { wall: true, on: false, ry: PI / 2 });
     P('whiteboard', 16.07, L2 + 1.0, 13.5, { ry: PI / 2, w: 1.6 });
     B.light({ x: 19, y: L2 + CH, z: 15, intensity: 6, fixture: 'panel', color: [1, 0.97, 0.92] });
@@ -425,8 +437,16 @@ export default {
     P('sofa', 31, L2, 18.2, { ry: PI, variant: 'grey' }); P('armchair', 29.2, L2, 16.6, { ry: PI / 2, variant: 'blue' }); P('coffee_table', 31, L2, 16.9, { variant: 'glass' });
     P('planter', 33.2, L2, 9.4, { len: 1.0 });
     // ---- team 2 lobby: security desk lobby, executive lifts (NE corner)
-    w32(34, 8.5, 34, ZF, { mat: 'tw_wall_warm', mat2: 'tw_veneer', openings: [{ at: 5.5, w: 2.6, h: 2.6, frame: false }] });
-    w32(34.06, 8.5, XW, 8.5, { mat: 'tw_veneer', mat2: 'tw_wall_warm', openings: [{ at: 5.94, w: 2.6, h: 2.6, frame: false }] });
+    w32(34, 8.5, 34, ZF, { mat: 'tw_wall_warm', mat2: 'tw_wall_warm', openings: [{ at: 5.5, w: 2.6, h: 2.6, frame: false }] });
+    w32(34.06, 8.5, XW, 8.5, { mat: 'tw_wall_warm', mat2: 'tw_wall_warm', openings: [{ at: 5.94, w: 2.6, h: 2.6, frame: false }] });
+    // walnut wainscot with a chair rail inside the lobby, stainless trims round the two wide openings
+    for (const [z0, z1] of [[8.62, 12.7], [15.3, 19.3]]) { box(34.09, L2 + 0.1, (z0 + z1) / 2, 0.02, 1.0, z1 - z0, { mat: 'tw_veneer', collide: false, cast: false }); box(34.11, L2 + 1.1, (z0 + z1) / 2, 0.04, 0.05, z1 - z0, { mat: 'tw_alu', collide: false, cast: false }); }
+    for (const [x0, x1] of [[34.15, 38.7], [41.3, 45.5]]) { box((x0 + x1) / 2, L2 + 0.1, 8.59, x1 - x0, 1.0, 0.02, { mat: 'tw_veneer', collide: false, cast: false }); box((x0 + x1) / 2, L2 + 1.1, 8.61, x1 - x0, 0.05, 0.04, { mat: 'tw_alu', collide: false, cast: false }); }
+    for (const z of [12.7, 15.3]) box(34.0, L2, z, 0.3, 2.6, 0.05, { mat: 'p_stainless', collide: false, cast: false });
+    box(34.0, L2 + 2.6, 14, 0.3, 0.05, 2.65, { mat: 'p_stainless', collide: false, cast: false });
+    for (const x of [38.7, 41.3]) box(x, L2, 8.5, 0.05, 2.6, 0.3, { mat: 'p_stainless', collide: false, cast: false });
+    box(40, L2 + 2.6, 8.5, 2.65, 0.05, 0.3, { mat: 'p_stainless', collide: false, cast: false });
+    P('wall_clock', 34.1, L2 + 2.3, 17.4, { ry: PI / 2, variant: 'chrome' });
     B.lobby(2, { x0: 34.1, z0: 8.6, x1: 45.5, z1: 19.3, y: L2 }, [{ x: 34, z: 14, w: 2.6, h: 2.6, ry: PI / 2 }, { x: 40, z: 8.5, w: 2.6, h: 2.6 }]);
     for (const [x, z] of [[35.3, 10.0], [37.1, 10.0], [38.9, 10.0], [42.6, 10.0], [44.4, 10.0], [35.3, 12.2], [37.1, 12.2], [38.9, 12.2], [42.6, 12.2], [44.4, 12.2],
       [35.3, 14.4], [37.1, 14.4], [38.9, 14.4], [42.6, 14.4]]) B.spawn(2, x, L2, z, x < 40 ? -PI / 2 : PI);
@@ -478,7 +498,7 @@ export default {
     P('coffee_table', 22.2, L2, -10.1, { variant: 'glass' });
     for (const x of [21, 25.6]) { P('sofa', x, L2, -17.6, { variant: 'leather', seats: 2 }); P('coffee_table', x, L2, -16.4, { variant: 'wood' }); }
     P('armchair', 28.6, L2, -14.6, { variant: 'leather', ry: -PI / 2 }); P('bookshelf', 29.78, L2, -17.4, { ry: -PI / 2, w: 1.8 });
-    P('planter', 9.6, L2, -9.0, { len: 1.0 }); P('planter', 28.8, L2, -9.2, { len: 1.0 });
+    P('planter', 9.12, L2, -8.56, { len: 1.0 }); P('planter', 29.4, L2, -8.56, { len: 1.0 });
     sign(B, 'art1', 21.0, L2 + 1.75, -8.09, 1.6, 1.2, PI); sign(B, 'exec', 14.0, L2 + 2.5, -7.91, 1.0, 0.2, 0);
     B.hide(11.6, L2, -9.4, { kind: 'dark', r: 0.5 });
     B.site('B', { x0: 9.4, z0: -18.8, x1: 29, z1: -8.8, y: L2 });

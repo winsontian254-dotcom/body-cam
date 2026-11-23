@@ -49,7 +49,7 @@ async function checkMap(browser, base, id, dir) {
         await page.evaluate(c => LF.sandbox.cam(c), cam);
         await frames(page, 3);
         if (overlay) await page.evaluate(overlay);
-        const f = path.join(dir, name + '.png'); await page.screenshot({ path: f }); res.shots.push(path.relative(ROOT, f));
+        const f = path.join(dir, name + ".png"); await page.screenshot({ path: f, timeout: 180000 }); res.shots.push(path.relative(ROOT, f));
         const s = await page.evaluate(() => { const o = document.getElementById('mc-ov'); if (o) o.remove(); return LF.sandbox.stats(); });
         res['dc_' + name] = s.drawCalls;
       };

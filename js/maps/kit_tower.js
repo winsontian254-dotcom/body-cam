@@ -17,9 +17,9 @@ import { MATERIALS } from '../gfx/materials.js';
 // ------------------------------------------------------------------------------------------------ materials
 const PM = (surf, set, scale, o) => Object.assign({ surf, set, tex: set ? 'assets/textures/' + set : null, scale }, o);
 export const TW_MATS = {
-  tw_carpet31: PM('carpet', 'carpet', .6, { color: '#3a3f47', desat: .85, macro: .1, por: 1, col: [.23, .25, .28], proc: 'noise' }),
-  tw_carpet32: PM('carpet', 'carpet', .6, { color: '#4d4740', desat: .85, macro: .1, por: 1, col: [.3, .28, .25], proc: 'noise' }),
-  tw_carpet_exec: PM('carpet', 'carpet', .6, { color: '#242d3b', desat: .9, macro: .08, por: 1, col: [.14, .18, .23], proc: 'noise' }),
+  tw_carpet31: PM('carpet', 'carpet', .6, { color: '#4f555e', desat: .85, macro: .1, por: 1, col: [.31, .33, .36], proc: 'noise' }),
+  tw_carpet32: PM('carpet', 'carpet', .6, { color: '#615a51', desat: .85, macro: .1, por: 1, col: [.38, .35, .32], proc: 'noise' }),
+  tw_carpet_exec: PM('carpet', 'carpet', .6, { color: '#33405a', desat: .9, macro: .08, por: 1, col: [.2, .25, .33], proc: 'noise' }),
   tw_raised: PM('tile', 'tile_floor', 2.4, { color: '#9da1a4', desat: .9, macro: .05, rough: .9, por: .1, col: [.62, .63, .64], proc: 'tile' }),
   tw_lobbystone: PM('tile', 'tile_floor', 3.0, { color: '#8f8a82', desat: .5, macro: .06, rough: .7, por: .1, col: [.56, .54, .51], proc: 'tile' }),
   tw_veneer: PM('wood', 'wood_dark', 2.0, { color: '#5a3e29', desat: .2, macro: .06, rough: .6, por: .3, col: [.35, .24, .16], proc: 'wood' }),
@@ -32,7 +32,7 @@ export const TW_MATS = {
   tw_mullion: PM('metal', 'steel', 1.5, { color: '#2f2e2c', desat: 1, rough: .55, metal: .8, macro: .03, por: .02, col: [.18, .18, .17], proc: 'metal' }),
   tw_alu: PM('metal', 'steel', 1.5, { color: '#a8acb0', desat: 1, rough: .5, metal: .9, macro: .03, por: .02, col: [.65, .67, .69], proc: 'metal' }),
   tw_skirt: PM('metal', 'painted_metal', 2.0, { color: '#2a2b2d', desat: 1, rough: .6, macro: .04, por: .1, col: [.16, .16, .17], proc: 'metal' }),
-  tw_case: PM('metal', 'painted_metal', 2.0, { color: '#d6d5d0', desat: 1, rough: .55, macro: .04, por: .1, col: [.84, .83, .81], proc: 'metal' }),
+  tw_case: PM('metal', null, 1, { rough: .5, macro: .03, por: .05, col: [.8, .8, .78], proc: 'noise' }),
   tw_steel_door: PM('metal', 'painted_metal', 2.0, { color: '#5d6a6f', desat: 1, rough: .55, macro: .06, por: .1, col: [.36, .41, .43], proc: 'metal' }),
   tw_fascia: PM('plaster', 'plaster_white', 2.0, { color: '#dedbd4', desat: .8, macro: .04, por: .4, col: [.87, .86, .83], proc: 'noise' }),
 };

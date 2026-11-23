@@ -256,7 +256,8 @@ export function sign(B, slot, x, y, z, w, h, face = 'n', o = {}) {
   const th = B.T.th + ry, cs = Math.cos(th), sn = Math.sin(th);
   const nw = [n[0] * cs + n[2] * sn, n[1], -n[0] * sn + n[2] * cs];
   let [u0, v0, u1, v1] = r.uv;
-  if (o.flip) { const t = u0; u0 = u1; u1 = t; }
+  // the corner order above runs right-to-left as seen from the front: swap u so text reads correctly (o.flip mirrors it)
+  if (!o.flip) { const t = u0; u0 = u1; u1 = t; }
   if (o.crop) { const [a, b2, c2, d2] = o.crop; const U0 = u0 + (u1 - u0) * a, U1 = u0 + (u1 - u0) * c2, V0 = v0 + (v1 - v0) * b2, V1 = v0 + (v1 - v0) * d2; u0 = U0; u1 = U1; v0 = V0; v1 = V1; }
   (o.glow ? list.glow : list.sign).push({ pts, n: nw, uv: [u0, v0, u1, v0, u1, v1, u0, v1] });
 }
@@ -654,7 +655,14 @@ const PROPS = {
   medshelf(K, r, o) {
     const L = o.len || 2.0, H = 2.1, D = .42, n = Math.max(1, Math.round(L / 1.0));
     K.box('p_paint_cream', 0, 0, 0, L, .08, D); K.box('p_paint_cream', 0, H - .03, 0, L, .03, D);
-    for (let i = 0; i <= n; i++) K.box('p_paint_cream', -L / 2 + i * L / n, 0, 0, .025, H, D);
+    for (let i = 1; i < n; i++) K.box('p_paint_cream', -L / 2 + i * L / n, 0, 0, .025, H, D);
+    // end panels: blue laminate with a white bay label and a kick plate (the gondola ends read from across the room)
+    for (const sx of [-1, 1]) {
+      K.box('p_coat_blue', sx * (L / 2 + .012), 0, 0, .04, H + .02, D + .02);
+      K.box('p_coat_white', sx * (L / 2 + .034), 1.55, 0, .006, .22, D * .7);
+      K.box('p_plastic_dark', sx * (L / 2 + .034), 1.6, 0, .007, .05, D * .45);
+      K.box('p_alu', sx * (L / 2 + .034), 0, 0, .006, .12, D);
+    }
     K.box('p_paint_cream', 0, 0, -D / 2 + .01, L, H, .02);
     const COLS = ['p_coat_white', 'p_coat_white', 'p_plastic_milky', 'p_coat_blue', 'p_coat_red', 'p_coat_green', 'p_paint_cream', 'p_coat_yellow'];
     for (let s = 0; s < 6; s++) {
@@ -810,6 +818,7 @@ export function P(B, type, x, y, z, o = {}) {
   const keyOpts = Object.assign({}, o); delete keyOpts.ry; delete keyOpts.inst; delete keyOpts.collide; delete keyOpts.hide;
   const key = 'hs_' + type + '_' + JSON.stringify(keyOpts);
   const K = kit(key, (K, r) => fn(K, r, keyOpts));
-  return emitKit(B, K, x, y, z, { ry: o.ry || 0, inst: o.inst, collide: o.collide, hide: o.hide }, key.replace(/[^a-z0-9_]/gi, '_'));
+  return emitKit(B, K, x, y, z, { ry: o.ry || 0, inst: o.inst, collide: o.collide, hide: o.hide, cast: o.cast !== undefined ? o.cast : B.noCast ? false : undefined },
+    key.replace(/[^a-z0-9_]/gi, '_'));
 }
 export const HS_PROPS = Object.keys(PROPS);

@@ -324,7 +324,7 @@ export function block(B, x0, z0, x1, z1, o = {}) {
       const sides = dir === 'z' ? { w: edgeA0, e: edgeA1, s: edgeL0, n: edgeL1 } : { s: edgeA0, n: edgeA1, w: edgeL0, e: edgeL1 };
       const outer = sides.w || sides.e || sides.n || sides.s;
       const longSide = dir === 'z' ? ['w', 'e'] : ['s', 'n'];
-      const det = [...detail].some(k => sides[k] && (longSide.includes(k) || r() < .35));
+      const det = [...detail].some(k => sides[k] && r() < (longSide.includes(k) ? .55 : .25));   // detailed props only on part of the lane faces (triangle budget)
       for (let t = 0; t < tiers; t++) {
         const color = o.color || PAL[Math.floor(r() * PAL.length)];
         const y = t * CH;
@@ -537,6 +537,20 @@ export function skyline(B, o = {}) {
     towers.push([x, z, w, h, dd]);
     if (h > 60) K.box('emissive_red', x, h, z, .5, .4, .5);
   }
+  // near industrial band (110..240 m east and south of the fence): long low sheds, tank farm, stacks, so the edge is not empty
+  for (let i = 0; i < 26; i++) {
+    const east = i < 14, t = r();
+    const x = east ? 125 + r() * 55 : -120 + r() * 230, z = east ? -150 + r() * 165 : -118 - r() * 60;
+    const w = east ? 18 + r() * 26 : 30 + r() * 50, dd = east ? 40 + r() * 50 : 16 + r() * 22, h = 7 + r() * 9;
+    K.box(t < .35 ? 'concrete_panels' : t < .7 ? 'p_paint_grey' : 'p_paint_beige', x, -.5, z, w, h + .5, dd);
+    K.box('steel_dark', x, h, z, w + .6, .5, dd + .6);                                       // roof edge / parapet line
+    K.box('concrete', x, -.5, z, w + .2, 1.9, dd + .2);                                       // plinth
+    K.box('glass_frosted', x, h * .62, z, w + .1, 1.1, dd + .1);                              // ribbon window band
+    for (const f of [-.3, .1, .4]) K.box('steel_dark', x + w * f, 1.4, z, 4.2, 4.4, dd + .14);   // loading doors (through both long sides)
+    if (r() < .4) K.cyl('p_paint_grey', x + w * .3, h, z, 1.6, 6 + r() * 6, { seg: 8 });       // stack / silo on the roof
+  }
+  for (let i = 0; i < 5; i++) { const x = 150 + i * 13, z = -60 + (i % 2) * 14; K.cyl('paint_white', x, -.5, z, 5.5, 12, { seg: 14 }); }   // tank farm
+  for (let i = 0; i < 18; i++) K.box(CMAT[PAL[i % PAL.length]], 110 + r() * 60, -.5, -45 + r() * 70, 2.5, 2.6 * (1 + Math.floor(r() * 3)) + .5, 12.2);
   // far terminal across the water (north-east): crane silhouettes and stacks
   for (let i = 0; i < 6; i++) {
     const x = 120 + i * 34, z = 420 + i * 6;

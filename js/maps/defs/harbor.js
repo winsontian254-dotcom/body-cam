@@ -107,7 +107,7 @@ export default {
       for (const z of [-78.55, -63.45]) B.box(x, 0, z, .32, 6.6, .3, { mat: 'paint_blue', collide: x > -26 && x < 2 });
       B.box(x, 6.4, -71, .25, .55, 15.4, { mat: 'paint_blue', collide: false });
     }
-    for (const [x, z] of [[-17, -71], [-6, -71], [2, -71]]) B.light({ x, y: 6.85, z, intensity: 14, color: [.95, .97, 1], fixture: 'tube' });
+    for (const [x, z] of [[-17, -71], [-6, -71], [2, -71]]) B.light({ x, y: 6.85, z, intensity: 24, color: [.95, .97, 1], fixture: 'tube' });
     for (const x of [-25, -12, 0]) B.box(x, 6.82, -66, 1.2, .05, .12, { mat: 'emissive_white', collide: false, cast: false });
     B.prop('box_truck', -25.5, 0, -72.5, { variant: 'logo', color: 'white' });
     B.prop('lockers', 5.35, 0, -74, { ry: -H, n: 5, variant: 'grey', bench: true });
@@ -115,6 +115,7 @@ export default {
     B.prop('desk', 1, 0, -77.9, { variant: 'metal', ry: 0 }); B.prop('monitor', 1, .75, -78.1, {}); B.prop('office_chair', 1, 0, -77, { ry: PI });
     B.prop('pallet', -8, 0, -77.6, { variant: 'wrap', stack: 1 }); B.prop('pallet', -6.6, 0, -77.6, { variant: 'boxes' });
     B.prop('pallet_jack', -9.6, 0, -76.6, { ry: .4 });
+    B.prop('forklift', -26.8, 0, -65.6, { ry: PI * .55 }); B.prop('drum', -28.6, 0, -77.6, { n: 3, variant: 'blue' }); B.prop('ibc_tank', -22.4, 0, -77.7, {});
     B.prop('cone', -14, 0, -77.5, {}); B.prop('cone', -14.6, 0, -77.9, {});
     B.prop('fire_extinguisher', -29.65, 0, -66, { ry: H }); B.prop('fire_extinguisher', 5.65, 0, -64.5, { ry: -H });
     decal(B, 'sign', 'inspect', -12, 4.6, -78.82, 6, .6, { face: 'n' });
@@ -164,15 +165,17 @@ export default {
       B.prop('semi_trailer', x, 0, z, { ry, variant: k, seed: 1, color: ['red', 'white', 'blue', 'grey'][Math.floor(x / 20) % 4] });
       if (k === 'flat') ccont(B, x, 1.35, z, ry, { len: 40, color: 'blue' });
     }
-    B.prop('truck_tractor', 58, 0, -46.8 + 1.0, { ry: PI, variant: 'red' }); B.hide(54.8, null, -50, { kind: 'car' });
+    B.prop('truck_tractor', 58, 0, -46.8 + 1.0, { ry: PI, variant: 'red' }); B.box(58, 0, -45.8, 2.4, 1.3, 5.8, { visible: false, surf: 'metal' });   // tractor chassis gap (nav saw a passage under it) B.hide(54.8, null, -50, { kind: 'car' });
     for (let x = 14; x < 86; x += 6) paint(B, x, -62.8, x, -48.5, { col: YEL, w: .12 });
     mast(B, 44, -47.2, { h: 24, aim: [44, -30], light: true, intensity: 1600, range: 55 });
 
     mark('gate road'); // ================================================================== gate road
     paint(B, -78, -41, 88, -41, { col: YEL, w: .14, dash: [4, 4] }); paint(B, -78, -45.6, 88, -45.6, { col: WHT, w: .12 }); paint(B, -78, -36.4, 88, -36.4, { col: WHT, w: .12 });
-    B.prop('truck_tractor', -44.5, 0, -43.4, { ry: H, variant: 'blue' }); B.prop('semi_trailer', -54.9, 0, -43.4, { ry: H, variant: 'flat', seed: 1 });
+    B.prop('truck_tractor', -46.4, 0, -43.4, { ry: H, variant: 'blue' }); B.prop('semi_trailer', -54.9, 0, -43.4, { ry: H, variant: 'flat', seed: 1 });
     ccont(B, -54.9, 1.35, -43.4, H, { len: 40, color: 'red' });
-    B.prop('truck_tractor', 14.5, 0, -38.6, { ry: -H, variant: 'white' }); B.prop('semi_trailer', 24.9, 0, -38.6, { ry: -H, variant: 'box', color: 'green', seed: 1 });
+    B.prop('truck_tractor', 16.4, 0, -38.6, { ry: -H, variant: 'white' }); B.prop('semi_trailer', 24.9, 0, -38.6, { ry: -H, variant: 'box', color: 'green', seed: 1 });
+    // coupled rigs: one solid block over the tractor-trailer gap (fifth wheel) so nobody wedges into the 0.5 m slot
+    B.box(-47.4, 0, -43.4, 5.2, 1.3, 2.5, { visible: false, surf: 'metal' }); B.box(17.4, 0, -38.6, 5.2, 1.3, 2.5, { visible: false, surf: 'metal' });
     for (const [x, z, ry] of [[-66, -41, 0], [-20, -41, .1], [-2.5, -41, -.1], [60, -41, 0], [70, -38.2, H * .2]]) B.prop('jersey_barrier', x, 0, z, { ry });
     decal(B, 'sign', 'slow', -30, .012, -43.4, 3.2, .7, { ry: -H }); decal(B, 'sign', 'slow', 40, .012, -38.6, 3.2, .7, { ry: H });
     decal(B, 'stain', 'tyre2', -10, .012, -43, 8, 1.4, {}); decal(B, 'stain', 'patch', 30, .012, -42, 4, 3, {});
@@ -233,6 +236,7 @@ export default {
     block(B, 13, -10, 24, 14, { tiers: 3, detail: 'wse' });
     // courtyard: stair onto B2, an open box (hide), reels, crates, a forklift
     B.stairs({ x: -26.75, z: -19.6, w: 1.4, len: 4.5, y0: 0, y1: 2.6, dir: '-x', mat: 'paint_yellow', tread: 'grate', rail: true, railMat: 'paint_yellow' });
+    B.box(-29.45, 2.49, -19.6, 1.0, .1, 1.4, { mat: 'grate', mats: { b: 'paint_yellow' }, surf: 'metal' });   // landing plate: stair head -> container roof (bridges the 0.6 m gap)
     pcont(B, -18, 0, -10.6, H, { color: 'rust', doors: 'open', hide: true });
     cableDrum(B, -12.2, 0, -19.6, .3); cableDrum(B, -10.6, 0, -18.3, .3, { r: .7 });
     B.prop('crate_stack', -21, 0, -20.5, { ry: .1 });
@@ -320,7 +324,7 @@ export default {
     mark('customs lane'); // ================================================================== customs lane: checkpoint + B ramp
     B.box(30, 0, 21, 1.8, .15, 6, { mat: 'concrete' });
     B.box(30, .15, 20.6, 1.6, 1.0, 2.2, { mat: 'paint_white' }); B.box(30, 1.15, 20.6, 1.6, 1.2, 2.2, { mat: 'p_glass_tint', surf: 'glass', cast: false }); B.box(30, 2.35, 20.6, 1.9, .25, 2.5, { mat: 'p_paint_darkgrey' });
-    B.light({ x: 30, y: 2.3, z: 20.6, intensity: 3, color: [1, .85, .6], fixture: 'bulb' });
+    B.box(30, 2.32, 20.6, .5, .03, .5, { mat: 'emissive_warm', collide: false, cast: false });   // booth ceiling lamp (emissive only: light budget)
     B.prop('gate', 27, .15, 23.6, { variant: 'barrier', len: 5.5 }); B.prop('gate', 33, .15, 18.4, { variant: 'barrier', len: 5.5, ry: PI });
     B.prop('jersey_barrier', 26, 0, 13, { ry: .1 }); B.prop('jersey_barrier', 34, 0, 9, { ry: -.1 });
     decal(B, 'sign', 'customs', 30, 3.05, 22.2, 3.8, .4, { face: 'n' }); B.box(30, 2.6, 22.08, 4, .9, .06, { mat: 'p_paint_darkgrey', collide: false });
@@ -369,7 +373,7 @@ export default {
     B.prop('pallet', 52, MY, 27.5, { variant: 'boxes', stack: 1 }); B.prop('pallet', 55, MY, 28.2, { variant: 'wrap' }); B.prop('cardboard_box', 57.5, MY, 27.8, { variant: 'pile' });
     // racks (west half), aisles, dock staging, cage (east)
     for (const [i, [x, z, ry]] of [[44.6, 15.3, 0], [55.5, 15.3, 0], [44.6, 16.55, PI], [55.5, 16.55, PI], [44.6, 8.3, 0], [55.5, 8.3, 0], [44.6, 9.55, PI], [55.5, 9.55, PI],
-      [44.6, -5.2, 0], [44.6, -3.95, PI]].entries()) B.prop('rack', x, FL, z, { ry, bays: 4, levels: 4, load: .5, seed: 1 + i % 2 });
+      [44.6, -5.2, 0], [44.6, -3.95, PI]].entries()) B.prop('rack', x, FL, z, { ry, bays: 4, levels: 4, load: .5, seed: 1 + i % 2, cast: false });   // under the roof: no sun shadow
     B.prop('vent', 39.4, FL, -13.05, { variant: 'duct', len: 2.4, ry: H, hide: true });
     // bonded cage
     const CG = { x0: 74, z0: 10, x1: 83.5, z1: 21 };

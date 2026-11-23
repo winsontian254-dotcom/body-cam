@@ -23,13 +23,14 @@ import { ladder, railing, louvres } from './props/parts.js';
 const PI = Math.PI;
 
 // ------------------------------------------------------------------------------------------------ sign atlas
-const AW = 1024, AH = 1024;
+const AW = 1024, AH = 2048;   // 2048 tall: the slots below fill ~1.6 rows of 1024
 const SANS = 'Arial, Helvetica, "Liberation Sans", sans-serif', MONO = '"Courier New", "Liberation Mono", monospace';
 const SLOTS = {};   // name -> [x, y, w, h] (px, top-left)
 const DRAW = [];
 let packX = 0, packY = 0, rowH = 0;
 function slot(name, w, h, fn) {
   if (packX + w > AW) { packX = 0; packY += rowH + 4; rowH = 0; }
+  if (packY + h > AH) throw new Error('railyard sign atlas full at ' + name);
   SLOTS[name] = [packX, packY, w, h]; DRAW.push([name, fn]);
   packX += w + 4; rowH = Math.max(rowH, h);
 }
@@ -216,7 +217,9 @@ export function sign(B, name, x, y, z, w, h, o = {}) {
   for (const p of P) { pos.push(p[0], p[1], p[2]); nor.push(N[0], N[1], N[2]); }
   vd.positions = pos; vd.normals = nor;
   // Babylon flips V on load of a DynamicTexture? (invertY true): v1 = top of the slot
-  vd.uvs = [u0, v0, u1, v0, u1, v1, u0, v1];
+  // the corner lists above run right-to-left as seen by a viewer in this left-handed frame, so U runs u1 -> u0 along them
+  // (and a ground quad 'u' reads from its south side: V runs v1 -> v0)
+  vd.uvs = f === 'u' ? [u0, v1, u1, v1, u1, v0, u0, v0] : [u1, v0, u0, v0, u0, v1, u1, v1];
   // front face: cross(b - a, c - a) . n < 0 -> pick the winding numerically
   const ax = P[1][0] - P[0][0], ay = P[1][1] - P[0][1], az = P[1][2] - P[0][2], bx = P[2][0] - P[0][0], by = P[2][1] - P[0][1], bz = P[2][2] - P[0][2];
   const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;

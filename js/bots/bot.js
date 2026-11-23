@@ -192,8 +192,9 @@ export class Bot {
     const path = this.path;
     if (!path) { this.wantYaw = this.yaw + 0.6 * dt; return; }
     let wp = path[this.pi];
-    while (wp && Math.hypot(wp.x - p.pos.x, wp.z - p.pos.z) < 0.45 && this.pi < path.length - 1) { this.pi++; wp = path[this.pi]; }
-    if (!wp || (this.pi >= path.length - 1 && Math.hypot(wp.x - p.pos.x, wp.z - p.pos.z) < 0.6)) { this.path = null; this.lastSeen = null; this.noise = null; return; }
+    const near = (w, r) => Math.hypot(w.x - p.pos.x, w.z - p.pos.z) < r && Math.abs(w.y - p.pos.y) < 1.0;   // same floor too
+    while (wp && near(wp, 0.45) && this.pi < path.length - 1) { this.pi++; wp = path[this.pi]; }
+    if (!wp || (this.pi >= path.length - 1 && near(wp, 0.6))) { this.path = null; this.lastSeen = null; this.noise = null; return; }
     const dx = wp.x - p.pos.x, dz = wp.z - p.pos.z;
     const yawTo = Math.atan2(dx, dz);
     this.wantYaw = yawTo;
