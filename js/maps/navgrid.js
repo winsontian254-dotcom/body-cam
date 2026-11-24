@@ -8,7 +8,14 @@
      nearest(x, y, z, maxR = 3) -> node index | -1        (prefers the level at or just below y)
      nodePos(i, out?) -> { x, y, z }, nodeAt(x, y, z) -> index | -1 (same cell, within a step)
      findPath(from, to, opts?) -> [{ x, y, z, link, crouch }] | null     from/to = {x,y,z} or node indices
-         opts = { smooth = true, maxExpand = 80000, cost(i) -> extra cost, crouchCost = 1.6 }; links: 'walk'|'drop'|'mantle'
+         opts = { smooth = true, maxExpand = 80000, cost(i) -> extra cost, crouchCost = 1.6, gatesOpen, weight = 1 (heuristic
+         weight: > 1 = faster, slightly longer paths) }; links: 'walk'|'drop'|'mantle'
+         wallCost (extra cost per missing neighbour x .25 cell: paths keep off walls), wide (m: smoothed legs keep this clearance)
+     pathTask(from, to, opts) -> task   time-sliced findPath (bots): task.step(maxExpand) -> done; task.path | null, task.aborted;
+         one sliced search per Nav at a time (a new pathTask aborts the previous); synchronous findPath calls do not disturb it
+     openness(i) -> 0..8 walk neighbours (low = against walls: cover)
+     nodesNear(x, y, z, r, out?, { stride = 1, dy = 1.6, max }) -> out (node indices on floors within dy of y)
+     nX / nZ / nY  Float32Array node coordinates
      walkLine(a, b) -> bool        straight walk between two points stays on connected nodes (used for string pulling)
      reachable(a, b, gatesOpen = true) -> bool,  flood(fromNodes, gatesOpen) -> Uint8Array visited
      component(i) -> label (gates open), randomNode(rand, filter?) -> index
@@ -28,24 +35,6 @@ const F_STAND = 1, F_CROUCH = 2, F_GATE = 4, F_TINY = 8;
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
 const MAXL = 8;   // levels kept per cell
 const SOLID = { solid: true };   // ledge tests use movement colliders (a rail bullets pass through still stops a body)
-
-class Heap {
-  constructor(n) { this.a = new Int32Array(Math.max(16, n)); this.f = null; this.n = 0; }
-  clear(f) { this.n = 0; this.f = f; }
-  push(i) {
-    if (this.n >= this.a.length) { const b = new Int32Array(this.a.length * 2); b.set(this.a); this.a = b; }
-    const a = this.a, f = this.f; let k = this.n++; a[k] = i;
-    while (k > 0) { const p = (k - 1) >> 1; if (f[a[p]] <= f[a[k]]) break; const t = a[p]; a[p] = a[k]; a[k] = t; k = p; }
-  }
-  pop() {
-    const a = this.a, f = this.f, top = a[0], last = a[--this.n];
-    if (this.n > 0) {
-      a[0] = last; let k = 0;
-      for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < this.n && f[a[l]] < f[a[m]]) m = l; if (r < this.n && f[a[r]] < f[a[m]]) m = r; if (m === k) break; const t = a[m]; a[m] = a[k]; a[k] = t; k = m; }
-    }
-    return top;
-  }
-}
 
 export function buildNav(world, bounds, opts = {}) {
   const t0 = now();
@@ -249,12 +238,10 @@ class Nav {
     Object.assign(this, d);
     this.nodeCount = d.nY.length;
     this.blockers = [];
-    this._stamp = new Int32Array(this.nodeCount); this._sid = 0;
-    this._g = new Float32Array(this.nodeCount); this._f = new Float32Array(this.nodeCount);
-    this._from = new Int32Array(this.nodeCount); this._fromK = new Uint8Array(this.nodeCount);
-    this._heap = new Heap(1024);
     this.comp = new Int32Array(this.nodeCount); this._ncomp = 0;
     this._gateById = new Map(); for (const g of this.gates) this._gateById.set(g.id, g);
+    this.nX = new Float32Array(this.nodeCount); this.nZ = new Float32Array(this.nodeCount);
+    for (let i = 0; i < this.nodeCount; i++) { const ci = d.nCell[i], ix = ci % d.nx; this.nX[i] = d.minX + (ix + 0.5) * d.cell; this.nZ[i] = d.minZ + ((ci - ix) / d.nx + 0.5) * d.cell; }
   }
   // -------------------------------------------------------------- basics
   nodePos(i, out = { x: 0, y: 0, z: 0 }) {
@@ -362,51 +349,65 @@ class Nav {
     const s = typeof from === 'number' ? from : this.nearest(from.x, from.y, from.z);
     const e = typeof to === 'number' ? to : this.nearest(to.x, to.y, to.z);
     if (s < 0 || e < 0) return null;
-    const P = this._astar(s, e, o);
-    if (!P) return null;
+    const S = this._main || (this._main = new Search(this));
+    S.start(s, e, o);
+    while (S.state === 0) S.run(1e9);
+    if (S.state !== 1) return null;
+    return this._finish(S.nodes(), from, to, o);
+  }
+  /** Time-sliced search (bots): task.step(maxExpand) -> true when finished; then task.path (smoothed, like findPath) or null.
+      One sliced search runs at a time per Nav (a new pathTask aborts the previous one: its step() returns true with path null). */
+  pathTask(from, to, o = {}) {
+    const S = this._slicer || (this._slicer = new Search(this));
+    const task = { done: false, path: null, expanded: 0, aborted: false, from, to, s: -1, e: -1, step: null };
+    if (S.task && !S.task.done) { S.task.done = true; S.task.aborted = true; }
+    S.task = task;
+    task.s = typeof from === 'number' ? from : this.nearest(from.x, from.y, from.z);
+    task.e = typeof to === 'number' ? to : this.nearest(to.x, to.y, to.z);
+    if (task.s < 0 || task.e < 0) { task.done = true; task.step = () => true; return task; }
+    S.start(task.s, task.e, o);
+    task.step = (max = 4000) => {
+      if (task.done) return true;
+      if (S.task !== task) { task.done = true; task.aborted = true; return true; }
+      S.run(max); task.expanded = S.expanded;
+      if (S.state === 0) return false;
+      task.done = true;
+      if (S.state === 1) task.path = this._finish(S.nodes(), from, to, o);
+      return true;
+    };
+    return task;
+  }
+  _finish(P, from, to, o) {
     const pts = P.map(([n, k]) => { const p = this.nodePos(n); p.link = LINK_NAMES[k]; p.crouch = this.isCrouchOnly(n); p.node = n; return p; });
     if (typeof from !== 'number') { pts[0].x = from.x; pts[0].z = from.z; }
     if (typeof to !== 'number' && pts.length > 1) { const l = pts[pts.length - 1]; if (Math.hypot(l.x - to.x, l.z - to.z) < this.cell * 1.5) { l.x = to.x; l.z = to.z; } }
-    return o.smooth === false ? pts : this._smooth(pts);
+    return o.smooth === false ? pts : this._smooth(pts, o.wide || 0);
   }
-  _astar(s, e, o) {
-    const sid = ++this._sid, st = this._stamp, g = this._g, f = this._f, from = this._from, fk = this._fromK, H = this._heap;
-    const ex = this.nodePos(e), tmp = { x: 0, y: 0, z: 0 };
-    const maxExpand = o.maxExpand || 80000, crouchCost = o.crouchCost || 1.6, extra = o.cost || null, gatesOpen = o.gatesOpen == null ? null : o.gatesOpen;
-    const h = n => { this.nodePos(n, tmp); const dx = Math.abs(tmp.x - ex.x), dz = Math.abs(tmp.z - ex.z); return Math.max(dx, dz) + 0.4142 * Math.min(dx, dz) + Math.abs(tmp.y - ex.y) * 0.5; };
-    H.clear(f);
-    st[s] = sid; g[s] = 0; f[s] = h(s); from[s] = -1; fk[s] = 0; H.push(s);
-    const closed = this._closed || (this._closed = new Int32Array(this.nodeCount));
-    let expanded = 0;
-    while (H.n) {
-      const v = H.pop();
-      if (v === e) break;
-      if (closed[v] === sid) continue;
-      closed[v] = sid;
-      if (++expanded > maxExpand) return null;
-      const gv = g[v];
-      for (let d = 0; d < 8; d++) {
-        const u = this.nb[v * 8 + d]; if (u < 0 || closed[u] === sid || !this._open(u, gatesOpen)) continue;
-        let c = (d < 4 ? 1 : 1.4142) * this.cell;
-        if (this.nFlag[u] & F_CROUCH) c *= crouchCost;
-        if (extra) c += extra(u);
-        const ng = gv + c;
-        if (st[u] !== sid || ng < g[u]) { st[u] = sid; g[u] = ng; f[u] = ng + h(u); from[u] = v; fk[u] = 0; H.push(u); }
-      }
-      for (let k = this.spStart[v]; k < this.spStart[v + 1]; k++) {
-        const u = this.spT[k]; if (closed[u] === sid || !this._open(u, gatesOpen)) continue;
-        const kind = this.spK[k];
-        let c = kind === NAV_LINK.DROP ? 1.5 + (this.nY[v] - this.nY[u]) * 0.8 : 3.0;
-        if (extra) c += extra(u);
-        const ng = gv + c;
-        if (st[u] !== sid || ng < g[u]) { st[u] = sid; g[u] = ng; f[u] = ng + h(u); from[u] = v; fk[u] = kind; H.push(u); }
+  _openArr() {
+    if (!this._open8) { const n = this.nodeCount, a = new Uint8Array(n); for (let i = 0; i < n; i++) { let c = 0; for (let d = 0; d < 8; d++) if (this.nb[i * 8 + d] >= 0) c++; a[i] = c; } this._open8 = a; }
+    return this._open8;
+  }
+  /** Walk-neighbour count of a node (0..8): low = against walls / in a corner (cover), 8 = open floor. */
+  openness(i) { let c = 0; for (let d = 0; d < 8; d++) if (this.nb[i * 8 + d] >= 0) c++; return c; }
+  /** Nodes within r (horizontal) of a point on floors within dy of y, sampled every `stride` cells -> out (indices). */
+  nodesNear(x, y, z, r, out = [], { stride = 1, dy = 1.6, max = 4000 } = {}) {
+    out.length = 0;
+    const c = this.cell, i0 = Math.max(0, Math.floor((x - r - this.minX) / c)), i1 = Math.min(this.nx - 1, Math.floor((x + r - this.minX) / c));
+    const j0 = Math.max(0, Math.floor((z - r - this.minZ) / c)), j1 = Math.min(this.nz - 1, Math.floor((z + r - this.minZ) / c));
+    const r2 = r * r;
+    for (let j = j0; j <= j1; j += stride) {
+      const cz = this.minZ + (j + 0.5) * c, ddz = cz - z;
+      for (let i = i0; i <= i1; i += stride) {
+        const cx = this.minX + (i + 0.5) * c, ddx = cx - x;
+        if (ddx * ddx + ddz * ddz > r2) continue;
+        const ci = j * this.nx + i, st = this.cStart[ci]; if (st < 0) continue;
+        for (let n = st; n < st + this.cCount[ci]; n++) {
+          if (this.nFlag[n] & F_TINY) continue;
+          if (Math.abs(this.nY[n] - y) <= dy) { out.push(n); if (out.length >= max) return out; }
+        }
       }
     }
-    if (st[e] !== sid) return null;
-    const path = [];
-    for (let v = e; v >= 0; v = from[v]) path.push([v, fk[v]]);
-    path.reverse();
-    return path;
+    return out;
   }
   /** Straight walk between two points over connected nodes (no drops), sampled every quarter cell. */
   walkLine(a, b, gatesOpen = null) {
@@ -429,19 +430,34 @@ class Nav {
     // the line must end on the destination's floor (two floors share a cell column: stairs, mezzanines)
     return Math.abs(y - b.y) <= this.step + 0.3;
   }
-  _smooth(pts) {
+  /** wide > 0: a smoothed leg also needs two parallel lines `wide` metres to each side to be walkable (keeps a body wider than
+      the nav agent off the corners it would otherwise clip). */
+  _wideLine(a, b, wide) {
+    if (!this.walkLine(a, b)) return false;
+    if (!wide) return true;
+    const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz);
+    if (L < 1.2) return true;
+    const ux = dx / L, uz = dz / L, px = -uz * wide, pz = ux * wide, m = 0.45;
+    const A = { x: 0, y: a.y, z: 0 }, B = { x: 0, y: b.y, z: 0 };
+    for (const s of [1, -1]) {
+      A.x = a.x + ux * m + px * s; A.z = a.z + uz * m + pz * s; B.x = b.x - ux * m + px * s; B.z = b.z - uz * m + pz * s;
+      if (!this.walkLine(A, B)) return false;
+    }
+    return true;
+  }
+  _smooth(pts, wide = 0) {
     if (pts.length <= 2) return pts;
-    const out = [pts[0]];
+    // greedy string pulling over a bounded set of candidates (geometric steps up to 48 points ahead): ~10 walkLine tests per leg
+    const out = [pts[0]], N = pts.length;
     let i = 0;
-    while (i < pts.length - 1) {
+    while (i < N - 1) {
+      let lim = Math.min(N - 1, i + 48);
+      for (let q = i + 1; q <= lim; q++) if (pts[q].link !== 'walk') { lim = q; break; }   // never smooth across drop / mantle links
       let best = i + 1;
-      const lim = Math.min(pts.length - 1, i + 80);
-      for (let k = lim; k > i + 1; k--) {
-        // never smooth across drop / mantle links: those waypoints stay
-        let special = false;
-        for (let q = i + 1; q <= k; q++) if (pts[q].link !== 'walk') { special = true; break; }
-        if (special) continue;
-        if (this.walkLine(pts[i], pts[k])) { best = k; break; }
+      for (let k = lim, stp = 1; k > i + 1; ) {
+        if (this._wideLine(pts[i], pts[k], wide)) { best = k; break; }
+        stp = Math.max(1, Math.floor((k - i) * 0.3));
+        k -= stp;
       }
       out.push(pts[best]);
       i = best;
@@ -461,6 +477,95 @@ class Nav {
   }
   losClear(a, b) { return !this.losBlocked(a, b); }
   dispose() { this.blockers.length = 0; }
+}
+
+/** One A* workspace (own arrays, so a sliced search survives synchronous findPath calls). Weighted heuristic: opts.weight (1 =
+    optimal; bots use ~1.35, a few % longer paths for far fewer expansions). Lazy-deletion binary heap with the keys stored inline. */
+class Search {
+  constructor(nav) {
+    const n = nav.nodeCount; this.nav = nav;
+    this.stamp = new Int32Array(n); this.closed = new Int32Array(n); this.sid = 0;
+    this.g = new Float32Array(n); this.from = new Int32Array(n); this.fk = new Uint8Array(n);
+    this.hn = new Int32Array(4096); this.hk = new Float32Array(4096); this.hc = 0;
+    this.state = 2; this.expanded = 0;
+  }
+  start(s, e, o) {
+    const nav = this.nav;
+    this.sid++; this.s = s; this.e = e; this.state = 0; this.expanded = 0; this.hc = 0;
+    this.maxExpand = o.maxExpand || 80000; this.crouchCost = o.crouchCost || 1.6; this.extra = o.cost || null;
+    this.gatesOpen = o.gatesOpen == null ? null : o.gatesOpen; this.w = o.weight || 1;
+    this.wall = o.wallCost ? o.wallCost * nav.cell : 0; this.open8 = this.wall ? nav._openArr() : null;
+    this.ex = nav.nX[e]; this.ey = nav.nY[e]; this.ez = nav.nZ[e];
+    this.stamp[s] = this.sid; this.g[s] = 0; this.from[s] = -1; this.fk[s] = 0;
+    this.push(s, this.h(s));
+  }
+  h(n) {
+    const nav = this.nav, dx = Math.abs(nav.nX[n] - this.ex), dz = Math.abs(nav.nZ[n] - this.ez);
+    return ((dx > dz ? dx + 0.4142 * dz : dz + 0.4142 * dx) + Math.abs(nav.nY[n] - this.ey) * 0.5) * this.w;
+  }
+  push(n, k) {
+    if (this.hc >= this.hn.length) { const a = new Int32Array(this.hn.length * 2); a.set(this.hn); this.hn = a; const b = new Float32Array(this.hk.length * 2); b.set(this.hk); this.hk = b; }
+    const hn = this.hn, hk = this.hk; let i = this.hc++;
+    while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hn[i] = hn[p]; hk[i] = hk[p]; i = p; }
+    hn[i] = n; hk[i] = k;
+  }
+  pop() {
+    const hn = this.hn, hk = this.hk, top = hn[0], c = --this.hc;
+    if (c > 0) {
+      const n = hn[c], k = hk[c]; let i = 0;
+      for (;;) {
+        let m = 2 * i + 1; if (m >= c) break;
+        if (m + 1 < c && hk[m + 1] < hk[m]) m++;
+        if (hk[m] >= k) break;
+        hn[i] = hn[m]; hk[i] = hk[m]; i = m;
+      }
+      hn[i] = n; hk[i] = k;
+    }
+    return top;
+  }
+  run(budget) {
+    if (this.state !== 0) return this.state;
+    const nav = this.nav, nb = nav.nb, nFlag = nav.nFlag, nY = nav.nY, spStart = nav.spStart, spT = nav.spT, spK = nav.spK;
+    const st = this.stamp, cl = this.closed, sid = this.sid, g = this.g, from = this.from, fk = this.fk, e = this.e;
+    const cell = nav.cell, diag = 1.4142 * cell, cc = this.crouchCost, extra = this.extra, go = this.gatesOpen, wall = this.wall, open8 = this.open8;
+    let n = 0;
+    while (this.hc) {
+      if (n >= budget) return 0;
+      const v = this.pop();
+      if (v === e) { this.state = 1; return 1; }
+      if (cl[v] === sid) continue;
+      cl[v] = sid; n++;
+      if (++this.expanded > this.maxExpand) { this.state = 2; return 2; }
+      const gv = g[v], b8 = v * 8;
+      for (let d = 0; d < 8; d++) {
+        const u = nb[b8 + d]; if (u < 0 || cl[u] === sid) continue;
+        if ((nFlag[u] & F_GATE) && !nav._open(u, go)) continue;
+        let c = d < 4 ? cell : diag;
+        if (nFlag[u] & F_CROUCH) c *= cc;
+        if (wall && open8[u] < 8) c += wall * (8 - open8[u]) * 0.25;
+        if (extra) c += extra(u);
+        const ng = gv + c;
+        if (st[u] !== sid || ng < g[u]) { st[u] = sid; g[u] = ng; from[u] = v; fk[u] = 0; this.push(u, ng + this.h(u)); }
+      }
+      for (let k = spStart[v]; k < spStart[v + 1]; k++) {
+        const u = spT[k]; if (cl[u] === sid) continue;
+        if ((nFlag[u] & F_GATE) && !nav._open(u, go)) continue;
+        const kind = spK[k];
+        let c = kind === NAV_LINK.DROP ? 1.5 + (nY[v] - nY[u]) * 0.8 : 3.0;
+        if (extra) c += extra(u);
+        const ng = gv + c;
+        if (st[u] !== sid || ng < g[u]) { st[u] = sid; g[u] = ng; from[u] = v; fk[u] = kind; this.push(u, ng + this.h(u)); }
+      }
+    }
+    this.state = st[e] === sid ? 1 : 2;
+    return this.state;
+  }
+  nodes() {
+    const path = [];
+    for (let v = this.e; v >= 0; v = this.from[v]) path.push([v, this.fk[v]]);
+    path.reverse();
+    return path;
+  }
 }
 
 function segSphere(ax, ay, az, bx, by, bz, cx, cy, cz, r) {

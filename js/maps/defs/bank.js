@@ -200,7 +200,7 @@ function buildLocal(B) {
     // back corridor west wall (A side) and the vault walls (0.8 m)
     W(2, 12.65, 2, 19.5, { y: FY, h: GH, mat: 'bk_bh', mat2: 'bk_wall', openings: [{ at: 3.35, w: 1.1, h: 2.2, frame: 'bk_frame' }] });
     W(1.675, 19.5, 1.675, 25.65, { y: FY, h: GH, t: 0.95, mat: 'bk_bh', mat2: 'bk_steel_dk', matEnd: 'bk_steel_dk', openings: [{ at: 3.5, w: 1.3, h: 2.3, frame: 'bk_steel' }] });
-    W(-17.8, 19.9, 1.2, 19.9, { y: FY, h: GH, t: 0.8, mat: 'bk_steel_dk', mat2: 'bk_wall', matEnd: 'bk_steel_dk', openings: [{ at: 9.8, w: 2.5, h: 2.6, frame: false }] });
+    W(-17.8, 19.9, 1.2, 19.9, { y: FY, h: GH, t: 0.8, mat: 'bk_steel', mat2: 'bk_wall', matEnd: 'bk_steel_dk', openings: [{ at: 9.8, w: 2.5, h: 2.6, frame: false }] });
     W(-17.4, 20.3, -17.4, 25.65, { y: FY, h: GH, t: 0.8, mat: 'bk_steel_dk', mat2: 'bk_bh', matEnd: 'bk_steel_dk' });
     W(-19.65, 19.65, -17.8, 19.65, { y: FY, h: GH, mat: 'bk_bh', mat2: IN, openings: [{ at: 0.95, w: 1.05, h: 2.1, frame: 'bk_frame' }] });
     // cash room, staff corridor, security
@@ -380,8 +380,8 @@ function buildLocal(B) {
     for (let x = -15.6; x < -12; x += 1.4) P('crate_plastic', x, FY, 21.6, { variant: 'grey', n: 2, ry: 0.1 });
     bc(-10, FY, 22.0, -6, FY + 0.9, 23.2, { mat: 'bk_steel', mats: { t: 'bk_steel_dk' } });                    // vault table (cover)
     for (const [x, z] of [[-3.5, 22.3], [-2.4, 23.4]]) { bc(x - 0.4, FY, z - 0.55, x + 0.4, FY + 1.1, z + 0.55, { mat: 'p_galv' }); for (let k = 0; k < 3; k++) box(x, FY + 0.25 + k * 0.33, z, 0.7, 0.2, 0.9, nc(k % 2 ? 'p_plastic_milky' : 'p_paint_milgreen', { cast: false })); }
-    bc(-17.0, FY + 3.1, 20.3, 1.2, FY + 3.3, 25.65, { mat: 'bk_steel_dk' });                                   // vault ceiling
-    light(-8, FY + 3.08, 23, { intensity: 6, fixture: 'tube', color: [0.92, 0.96, 1] });
+    bc(-17.0, FY + 3.1, 20.3, 1.2, FY + 3.3, 25.65, { mat: 'bk_steel_dk', mats: { b: 'bk_wall' } });                                   // vault ceiling
+    light(-12.5, FY + 3.08, 23, { intensity: 10, fixture: 'tube', color: [0.92, 0.96, 1] }); light(-3.5, FY + 3.08, 23, { intensity: 10, fixture: 'tube', color: [0.92, 0.96, 1] });
     pendant(B, -13.5, UY - 0.3, 16, 1.2); pendant(B, -4, UY - 0.3, 16, 1.2);
     light(-13.5, UY - 1.75, 16, { intensity: 9, color: [1, 0.86, 0.66], fixture: false, range: 10 });
     light(-4, UY - 1.75, 16, { intensity: 9, color: [1, 0.86, 0.66], fixture: false, range: 10 });
@@ -407,6 +407,9 @@ function buildLocal(B) {
     sign(B, 'pinboard', 23.62, FY + 1.5, 4.8, 1.2, 0.8, -H); sign(B, 'breakrm', 23.62, UY - 1.6, 9.5, 0.7, 0.28, -H);
     P('fire_extinguisher', 23.6, FY, 10.2, { ry: -H }); sign(B, 'exit', 23.62, FY + 2.75, 7, 0.5, 0.22, -H, true);
     light(17.5, UY - 0.3, 7, { intensity: 7, fixture: 'tube', color: [0.95, 0.98, 1] });
+    P('bench', 12.55, FY, 5.6, { ry: H, variant: 'metal', len: 1.6 }); P('poster', 12.18, FY + 1.55, 5.6, { ry: H }); P('wall_clock', 12.18, FY + 2.6, 7.2, { ry: H });
+    P('litter_bin', 12.45, FY, 7.6, { variant: 'square' }); sign(B, 'staff', 12.17, FY + 2.45, 10.0, 0.6, 0.2, H); P('whiteboard', 12.18, FY + 1.0, 11.2, { ry: H, w: 1.2 });
+    skirt(12.16, 3.15, 12.16, 12.2, FY, 'bk_steel_dk', 0.1);
     P('desk', 18.5, FY, -3.6, { variant: 'exec' }); P('office_chair', 18.5, FY, -4.6, { variant: 'leather' });
     for (const x of [17.8, 19.2]) P('chair', x, FY, -2.3, { variant: 'dark', ry: PI });
     P('sofa', 22.9, FY, 0.2, { variant: 'leather', ry: -H }); P('coffee_table', 21.6, FY, 0.2, { variant: 'glass', ry: H });
@@ -449,6 +452,7 @@ function buildLocal(B) {
     P('dining_table', 22.3, UY, -3.6, { variant: 'set', chairs: 2, w: 1.2, ry: H }); P('sofa', 23.1, UY, 2.3, { variant: 'teal', ry: -H, seats: 2 });
     P('tv', 21.7, UY + 1.5, 4.83, { ry: PI, wall: true, on: false }); sign(B, 'pinboard', 14.6, UY + 1.4, 4.83, 1.0, 0.66, PI);
     sign(B, 'breakrm', 18, UY + 2.75, 5.17, 0.7, 0.28, 0);
+    P('wall_clock', 18, UY + 2.2, 4.82, { ry: PI }); P('fire_extinguisher', 12.75, UY, 4.3, { ry: H }); P('rug', 18.5, UY + 0.005, -0.6, { variant: 'green', w: 4, d: 3 });
     light(15.5, TOP, -0.5, { intensity: 6, fixture: 'panel', color: [1, 0.95, 0.88] }); light(20.5, TOP, -0.5, { intensity: 6, fixture: 'panel', color: [1, 0.95, 0.88] });
     // upper corridor: copier, water cooler, bench
     bc(22.8, UY, 6.0, 23.6, UY + 1.1, 7.0, { mat: 'p_plastic_beige' }); B.cyl(13.0, UY, 9.6, 0.17, 1.15, { mat: 'p_plastic_milky', sides: 10 });
@@ -625,6 +629,16 @@ function buildLocal(B) {
     light(-70, GC, -46.5, { intensity: 6, fixture: 'tube', color: [0.9, 0.95, 1] }); light(-62, GC, -46.5, { intensity: 6, fixture: 'tube', color: [0.9, 0.95, 1] });
     for (const x of [-77, -66]) bc(x - 0.6, GC - 0.06, -52.5, x + 0.6, GC, -52.4, nc('bk_glow_cool', { cast: false }));
     P('fire_extinguisher', -56.2, 0, -45, { ry: -H }); P('drum', -79.3, 0, -43, { variant: 'yellow' });
+    // ramp hall dressing: columns, sprinkler mains and conduits under the slab, wheel stops, bay numbers, stair door, cones
+    for (const x of [-70.5, -64.5]) { bc(x - 0.3, 0, -54.3, x + 0.3, GC, -53.7, { mat: 'bk_garage' }); bc(x - 0.31, 0, -54.31, x + 0.31, 1.0, -53.69, nc('paint_yellow', { cast: false })); }
+    for (const z of [-44.2, -49.5, -54.6]) bc(-79.6, GC - 0.32, z - 0.05, -56.4, GC - 0.22, z + 0.05, nc('paint_red', { cast: false }));
+    for (let x = -78; x < -56; x += 3.3) for (const z of [-44.2, -49.5, -54.6]) { bc(x - 0.04, GC - 0.22, z - 0.04, x + 0.04, GC, z + 0.04, nc('paint_red', { cast: false })); B.cyl(x, GC - 0.42, z, 0.035, 0.1, { mat: 'p_chrome', sides: 6, collide: false }); }
+    bc(-79.75, GC - 0.5, -55.6, -79.65, GC - 0.4, -42.4, nc('bk_steel_dk', { cast: false })); bc(-56.35, GC - 0.5, -55.6, -56.25, GC - 0.4, -42.4, nc('bk_steel_dk', { cast: false }));
+    for (let x = -70; x < -56; x += 3) { bc(x - 0.8, 0, -55.6, x + 0.8, 0.12, -55.4, { mat: 'concrete', collide: false, cast: false }); bc(x - 0.8, 0.12, -55.56, x + 0.8, 0.125, -55.44, nc('paint_yellow', { cast: false })); }
+    door(B, -56.2, 0, -53.0, -H, { v: 'metal', w: 1.0 }); sign(B, 'exit', -56.25, 2.35, -53.0, 0.5, 0.22, -H, true); sign(B, 'g_level', -56.25, 1.6, -50.2, 1.2, 0.3, -H);
+    for (const [x, z] of [[-73.6, -43.3], [-73.0, -43.6], [-57.0, -43.0]]) P('cone', x, 0, z, { variant: 'cone' });
+    P('wheelie_bin', -79.2, 0, -54.9, { variant: 'grey', ry: H }); P('scan_wet_floor_sign', -66.5, 0, -43.2, { ry: 0.6, collide: false });
+    for (const [x, z] of [[-75, -48], [-63, -51], [-58, -46], [-70, -44]]) P('scan_trashbag', x + 0.3, 0, z, { collide: false });
     B.lobby(1, { x0: -79.8, z0: -55.8, x1: -56.2, z1: -42.2, y: 0 }, [{ x: -74, z: -42, w: 3.2, h: 2.6 }, { x: -62, z: -42, w: 3.2, h: 2.6 }]);
     for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) if (!(i === 4 && j === 0)) B.spawn(1, -72 + i * 3, 0.02, -50 + j * 2.6, 0);
     // the street lane west of the garage entrance and the corner building behind it (sealed)

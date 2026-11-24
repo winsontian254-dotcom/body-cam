@@ -20,7 +20,7 @@ const TAU = Math.PI * 2, H = Math.PI / 2;
 export function rng(seed) { let a = seed >>> 0 || 1; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 export function cs(B) { if (!B._cs) B._cs = { acc: new Map(), kits: new Map(), seed: 1 }; return B._cs; }
-const CELL = 32;
+const CELL = 64;
 export function kit(B, x, z, nc) {
   const S = cs(B), k = Math.floor(x / CELL) + '_' + Math.floor(z / CELL) + (nc ? '_nc' : '');
   let K = S.kits.get(k); if (!K) { K = new Kit(S.seed++); S.kits.set(k, K); }
@@ -304,7 +304,8 @@ export function stair(B, o) {
   K.pop();
   // ramp collider (axis aligned; bullets and sight pass the open steps)
   const ax = dir === '+x' || dir === '-x' ? 'x' : 'z', up = dir === '+x' || dir === '+z';
-  B.world.addRamp({ cx: o.x, cz: o.z, hx: ax === 'x' ? len / 2 : w / 2, hz: ax === 'z' ? len / 2 : w / 2, y0: up ? y0 : y1, y1: up ? y1 : y0, axis: ax, surf: 'metal', ray: false });
+  const wp = B.toWorld(o.x, 0, o.z);
+  B.world.addRamp({ cx: wp.x, cz: wp.z, hx: ax === 'x' ? len / 2 : w / 2, hz: ax === 'z' ? len / 2 : w / 2, y0: wp.y + (up ? y0 : y1), y1: wp.y + (up ? y1 : y0), axis: ax, surf: 'metal', ray: false });
 }
 /** grated deck: top at y; o.beam = edge beams (default true), o.mat */
 export function deck(B, x0, z0, x1, z1, y, o = {}) {
@@ -446,7 +447,7 @@ export function scaffold(B, x0, z0, x1, z1, o = {}) {
   }
   // face bracing (zig-zag on the outer row)
   for (let i = 0; i < n; i++) { const a = xs[i], b = xs[i + 1], up = i % 2; K.tube(GALV, [[a, up ? top - .3 : .3, zo + .05 * out], [b, up ? .3 : top - .3, zo + .05 * out]], .022, { seg: 5 }); }
-  if (o.net) { K.box('p_tarp_blue', 0, o.net[0], zo + .1 * out, Ln.L, o.net[1] - o.net[0], .01); K.noCast('p_tarp_blue'); }
+  if (o.net) { const nm = o.netMat || 'p_tarp_blue'; K.box(nm, 0, o.net[0], zo + .1 * out, Ln.L, o.net[1] - o.net[0], .01); K.noCast(nm); }
   K.pop();
   if (o.cols !== false) for (const x of xs) for (const z of [zi, zo]) {
     const wx = Ln.cx + Ln.ux * x + Math.sin(Ln.ry) * z, wz = Ln.cz + Ln.uz * x + Math.cos(Ln.ry) * z;
@@ -565,16 +566,23 @@ export function portaloo(B, x, z, ry, mat = 'p_plastic_blue') {
   B.box(x, 0, z, 1.18, 2.36, 1.22, { ry, visible: false, surf: 'rubber' });
 }
 
-/** open steel skip (builder's skip, 1.8 x 1.5 x 3.6) with rubble; collider (top 1.5) */
+/** open steel builder's skip (1.8 x 1.5 x 3.6 over the rims; sloped ends, ribbed sides, lifting lugs) with rubble; collider (top 1.45).
+    The long axis runs along z before ry. */
 export function skip(B, x, z, ry, o = {}) {
-  const K = kit(B, x, z), m = o.mat || 'p_coat_yellow', L = 3.6, W = 1.8, H = 1.45;
-  K.push(x, 0, z, ry);
-  K.pop();
-  K.push(x, 0, z, ry + Math.PI / 2);
-  for (const s of [-1, 1]) { K.push(0, .2, s * (L / 2 - .32), s > 0 ? -.45 : .45); K.box(m, 0, 0, 0, W, 1.4, .06); K.pop(); }
-  K.box('steel_dark', 0, 0, 0, W - .2, .2, L - 1.4);
-  for (const s of [-1, 1]) K.box(m, 0, H - .06, s * (L / 2 - .02), W + .02, .08, .08);
-  if (o.fill !== false) { K.blob('p_rock', 0, .6, 0, .75, .5, 1.2, { seg: 8, noise: .3, seed: (x * 13 + z) | 0, flat: .4 }); K.blob('p_wood_pallet', .3, 1.0, -.4, .5, .12, .9, { seg: 6, noise: .4, seed: 3 }); }
+  const K = kit(B, x, z), m = o.mat || 'p_coat_yellow', L = 3.6, Lb = 2.3, W = 1.8, H = 1.45, y0 = .12;
+  K.push(x, 0, z, ry + Math.PI / 2);                                                    // local x = the long axis
+  const trap = [[-Lb / 2, y0], [Lb / 2, y0], [L / 2, H], [-L / 2, H]];
+  for (const s of [-1, 1]) {
+    K.ext(m, trap, s > 0 ? W / 2 - .05 : -W / 2, s > 0 ? W / 2 : -W / 2 + .05);       // side walls
+    for (const xx of [-.8, 0, .8]) K.box(m, xx, y0, s * (W / 2 + .03), .1, H - y0 - .05, .06);   // ribs
+    for (const xx of [-.55, .55]) K.box('steel_dark', xx, .85, s * (W / 2 + .06), .16, .24, .08); // lifting lugs
+    K.box(m, 0, H - .1, s * (W / 2 - .02), L, .1, .1);                                  // long rims
+    K.box(m, s * (L / 2 - .03), H - .1, 0, .1, .1, W);                                   // end rims
+    K.quad(m, [s * Lb / 2, y0, -W / 2 + .05], [s * Lb / 2, y0, W / 2 - .05], [s * L / 2, H, W / 2 - .05], [s * L / 2, H, -W / 2 + .05], { two: true });
+  }
+  K.box('steel_dark', 0, .02, 0, Lb, .1, W - .1);                                       // floor
+  for (const s of [-1, 1]) K.box('steel_dark', 0, 0, s * .5, Lb - .2, .1, .14);          // runners
+  if (o.fill !== false) { K.blob('p_rock', 0, .55, 0, 1.25, .45, .7, { seg: 8, noise: .3, seed: (x * 13 + z) | 0, flat: .4 }); K.blob('p_wood_pallet', -.4, .9, .3, .9, .12, .5, { seg: 6, noise: .4, seed: 3 }); }
   K.pop();
   B.box(x, 0, z, W, H, L, { ry, visible: false, surf: 'metal' });
 }

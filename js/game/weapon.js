@@ -30,15 +30,34 @@
    an empty reload must finish (bolt release). Shell reloads load one shell at a time; fire / switch stop after the current shell.
    Events: 'shot' { p, gun, origin, dir, traces: [{ end, hit }], tracer, suppressed, pellets, seq, kick, ads }
      'reload' { p, gun, stage: 'start'|'magout'|'magin'|'shell'|'chamber'|'end'|'cancel' }  'switch' { p, slot, from }
-     'dry' { p, gun }  'melee' { p, kind, gun, side }  'firemode' { p, mode }  'inspect' { p }  'drop' { p, drop }  'pickup' { p, drop } */
-import { getGun, spreadAt, recoilStep, fireInterval } from '../weapons/data.js';
+     'dry' { p, gun }  'melee' { p, kind, gun, side }  'firemode' { p, mode }  'inspect' { p }  'drop' { p, drop }  'pickup' { p, drop }
+   Weapons integration additions (recoil / sway / attachments / manual actions / thrown melee):
+     recoil lives in js/weapons/recoil.js (spray pattern + jitter, recovery, first-shot accuracy, sway + breath hold); bullets follow
+     the view + ax / ay + the sway (ws.swX / ws.swY, rad), so what the scope shows is where the round goes.
+     ws extras: swT (sway clock), swX / swY (current sway, rad), brH / brOut / brK (breath hold: Shift = BTN.WALK while aiming a gun
+     with breath.hold > 0), bip (bipod deployed 0 | 1), cycT / cycI (manual action: time since the shot / events sent), thermal (palette index)
+     w.dev (weapon instance): side device on (laser / light; ALT toggles it when not aiming a multi-level optic)
+     ALT: aiming a multi-level optic = next zoom level (LPVO 1x <-> 6x, variable scopes); aiming a thermal = next palette;
+     tomahawk-type melee (spec.throw) = throw it; otherwise toggles the side device.
+     'cycle' { p, w, gun, stage: 'pumpback'|'pumpfwd'|'boltopen'|'boltclose'|'lever', eject } manual action steps at fixed shares of
+       the cycle time (pump .3 / .55, bolt .24 / .6, lever .28); eject = a spent case leaves the port now
+     'melee:hit' { p, kind, gun, res: 'hit'|'back'|'miss' }   'melee:throw' { p, gun, thrown }   'device' { p, w, on }
+     game.thrown = [{ id, w, from, x, y, z, vx, vy, vz, rot, spin, t }]   thrown melee in flight (thrownTick moves them; they become
+       world drops where they land, a hit deals spec.throw.dmg (back: spec.throw.back) through game.damage)
+     p.shotT = game.time of the last shot that was NOT suppressed (radar / sound reveal)
+     thrownTick(game, dt)   advance thrown melee (call once per tick; the weapons system in viewmodel.js does) */
+import { getGun, spreadAt, fireInterval } from '../weapons/data.js';
 import { effectiveStats } from '../weapons/attachments.js';
 import { BTN as MB, eyePos } from '../phys/move.js';
-import { fireShot, meleeAttack } from './combat.js';
+import { raycast } from '../phys/ray.js';
+import { fireShot, meleeAttack, applyDamage } from './combat.js';
+import { raycastPlayer } from './hitbox.js';
+import { isEnemy } from './player.js';
+import { RECOIL_VIEW as RV, sprayStep, recoverAim, firstShotK, swayAt, breathTick } from '../weapons/recoil.js';
 
 const B_MODE = 4096;
 const DEG = Math.PI / 180, TAU = Math.PI * 2;
-export const RECOIL_VIEW = 0.5;
+export const RECOIL_VIEW = RV;
 export const INSPECT_TIME = 3.4;
 export const PICKUP_R = 1.15;
 export const DROP_LIFE = 90;
@@ -65,7 +84,7 @@ export function statsOf(w) {
 export function makeWeapon(gunId, o = {}) {
   const g = getGun(gunId); if (!g) return null;
   const w = { uid: 'w' + (++uidN), gunId: g.id, mag: 0, reserve: 0, mods: { ...(o.mods || {}) }, skin: o.skin || 'factory',
-    fireMode: g.modes && g.modes[0] || null, melee: g.cat === 'melee' };
+    fireMode: g.modes && g.modes[0] || null, melee: g.cat === 'melee', dev: true };
   const st = statsOf(w);
   w.mag = o.mag != null ? o.mag : (st.mag || 0);
   w.reserve = o.reserve != null ? o.reserve : (st.reserve || 0);
@@ -74,7 +93,8 @@ export function makeWeapon(gunId, o = {}) {
 
 export function newWeaponState() {
   return { state: 'idle', t: 0, dur: 0, cool: 0, btn: 0, burst: 0, ads: 0, shots: 0, ax: 0, ay: 0, bloom: 0, since: 9, cyc: 0,
-    rl: null, ml: null, seq: 0, zoomIdx: 0, nadeT: -1, kick: 0, dry: 0, semiBuf: 0, mlSide: 0 };
+    rl: null, ml: null, seq: 0, zoomIdx: 0, nadeT: -1, kick: 0, dry: 0, semiBuf: 0, mlSide: 0,
+    swT: 0, swX: 0, swY: 0, brH: 0, brOut: 0, brK: 1, bip: 0, cycT: 9, cycI: 9, cycN: 0, thermal: 0 };
 }
 
 export function slotItem(p, slot) {
@@ -131,7 +151,7 @@ export function moveSpeed(p) {
 export function currentCone(p) {
   const w = currentWeapon(p); if (!w || w.melee) return 0;
   const st = statsOf(w), sf = Math.hypot(p.vel.x, p.vel.z) / Math.max(0.5, st.speed || 5);
-  return spreadAt(st, { speedFrac: sf, air: !p.onGround, crouch: p.crouch || 0, ads: p.ws.ads, bloom: p.ws.bloom });
+  return spreadAt(st, { speedFrac: sf, air: !p.onGround, crouch: p.crouch || 0, ads: p.ws.ads, bloom: p.ws.bloom }) * (p.ws.bip ? 0.75 : 1) * hipLaser(st, p.ws, w);
 }
 export function adsZoom(p) {
   const w = currentWeapon(p); if (!w || w.melee) return 1;
@@ -143,9 +163,19 @@ export function adsZoom(p) {
 export function scopedView(p, minAds = 0.82) {
   const w = currentWeapon(p); if (!w || w.melee || p.ws.ads < minAds) return false;
   const st = statsOf(w), lv = st.zoomLevels || [];
+  if (st.thermal) return true;                                   // thermal sights show their screen full-size
+  const z = adsZoom(p);
+  if (st.opticKind === 'lpvo') return z >= 4;                   // LPVO: 1x is a red dot, 6x is a scope
   let mx = 0; for (let i = 0; i < lv.length; i++) if (lv[i] > mx) mx = lv[i];
-  return mx >= 5 || adsZoom(p) >= 5;
+  return mx >= 5.5 || z >= 5.5;
 }
+/** sniper-style overlay (black surround) vs a lens view (gun on screen): 'overlay' | 'lens' | 'none' */
+export function sightView(p) {
+  const w = currentWeapon(p); if (!w || w.melee) return 'none';
+  if (scopedView(p, 0)) return 'overlay';
+  return adsZoom(p) >= 1.4 ? 'lens' : 'none';
+}
+export const swayOf = p => (p && p.ws ? { x: p.ws.swX || 0, y: p.ws.swY || 0 } : { x: 0, y: 0 });
 export const adsProgress = p => p.ws.ads;
 export function reloadProgress(p) { const r = p.ws.rl; if (!r) return -1; return r.kind === 'shell' ? r.prog || 0 : Math.min(1, r.t / r.dur); }
 
@@ -156,9 +186,11 @@ function shoot(game, p, w, st) {
   const ws = p.ws, rng = game.rng;
   if (!(game.options && game.options.infiniteMag)) w.mag--;
   ws.seq++; ws.kick++; ws.since = 0; p.spawnProtect = 0; p.stat.shots++;
-  const yaw = p.yaw + ws.ax * DEG, pitch = p.pitch - ws.ay * DEG;
+  if (!st.suppressed) p.shotT = game.time || 0;
+  const yaw = p.yaw + ws.ax * DEG + ws.swX, pitch = p.pitch - ws.ay * DEG - ws.swY;
   const sf = Math.hypot(p.vel.x, p.vel.z) / Math.max(0.5, st.speed || 5);
-  const cone = spreadAt(st, { speedFrac: sf, air: !p.onGround, crouch: p.crouch || 0, ads: ws.ads, bloom: ws.bloom });
+  const cone = spreadAt(st, { speedFrac: sf, air: !p.onGround, crouch: p.crouch || 0, ads: ws.ads, bloom: ws.bloom })
+    * firstShotK(ws, st, sf > 0.3 || !p.onGround) * (ws.bip ? 0.75 : 1) * hipLaser(st, ws, w);
   eyePos(p, ORIGIN);
   const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
   const fx = sy * cp, fy = -sp, fz = cy * cp, rx = cy, rz = -sy, ux = sy * sp, uy = cp, uz = cy * sp;
@@ -178,15 +210,29 @@ function shoot(game, p, w, st) {
     traces.push({ end: r.end, hit: r.hits.length > 0, dist: r.dist });
   }
   // recoil: the spray pattern moves the aim offset; the camera follows RECOIL_VIEW of it
-  const step = recoilStep(st, Math.floor(ws.shots)), rnd = (st.recoil && st.recoil.random) || 0;
-  const bip = p.crouch > 0.8 && st.bipod && st.bipod < 1 ? st.bipod : 1;
-  ws.ax += (step[0] + (rng() * 2 - 1) * rnd) * bip;
-  ws.ay += (step[1] + (rng() * 2 - 1) * rnd * 0.5) * bip;
-  ws.shots += 1;
-  ws.bloom = Math.min(ws.bloom + ((st.spread && st.spread.shot) || 0), (st.spread && st.spread.max) || 0.1);
-  if (st.cycle) ws.cyc = fireInterval(st, w.fireMode) * 0.92;
+  const bip = ws.bip && st.bipod && st.bipod < 1 ? st.bipod : 1;
+  sprayStep(st, ws, rng, bip);
+  if (st.cycle) { ws.cyc = fireInterval(st, w.fireMode) * 0.92; ws.cycT = 0; ws.cycI = 0; ws.cycN = ws.cyc; }
   if (game.bus) game.bus.emit('shot', { p, gun: st, w, origin: { x: ORIGIN.x, y: ORIGIN.y, z: ORIGIN.z }, dir: { x: fx, y: fy, z: fz }, traces,
     tracer: st.tracer > 0 && ws.seq % st.tracer === 0, suppressed: !!st.suppressed, pellets, seq: ws.seq, kick: (st.recoil && st.recoil.kick) || 1, ads: ws.ads });
+}
+
+/** a visible laser (not IR) tightens the hip cone (attachments.js hipSpread is already in the stats; this is the
+    'laser on' gate: with the device switched off the bonus is taken back) */
+function hipLaser(st, ws, w) {
+  if (!st.laser || !w || w.dev !== false) return 1;
+  const g = getGun(w.gunId), h0 = g && g.spread ? g.spread.hip : 1, h1 = st.spread ? st.spread.hip : 1;
+  return 1 + (h0 / Math.max(0.05, h1) - 1) * (1 - (ws.ads || 0));
+}
+const CYC = { pump: [['pumpback', 0.3, true], ['pumpfwd', 0.55]], bolt: [['boltopen', 0.24, true], ['boltclose', 0.6]], lever: [['lever', 0.28, true]] };
+function cycleTick(game, p, w, st, dt) {
+  const ws = p.ws, list = CYC[st.cycle]; if (!list || ws.cycT > 8) return;
+  ws.cycT += dt;
+  const I = ws.cycN / 0.92;
+  while (ws.cycI < list.length && ws.cycT >= list[ws.cycI][1] * I) {
+    const [stage, , eject] = list[ws.cycI]; ws.cycI++;
+    if (game.bus) game.bus.emit('cycle', { p, w, gun: st, stage, eject: !!eject });
+  }
 }
 
 function startReload(game, p, w, st) {
@@ -242,18 +288,24 @@ function meleeTick(game, p, w, dt, b, pressed) {
   if (ws.state === 'draw') { if (ws.t >= ws.dur) { ws.state = 'idle'; ws.t = 0; } else return; }
   if (ws.ml) {
     const m = ws.ml; m.t += dt;
-    if (!m.hit && m.t >= m.hitAt) { m.hit = true; const r = meleeAttack(game, p, m.kind, spec, w.gunId); m.res = r ? (r.backstab ? 'back' : 'hit') : 'miss'; }
+    if (!m.hit && m.t >= m.hitAt) {
+      m.hit = true;
+      if (m.kind === 'throw') { throwMelee(game, p, w, spec); return; }
+      const r = meleeAttack(game, p, m.kind, spec, w.gunId); m.res = r ? (r.backstab ? 'back' : 'hit') : 'miss';
+      if (game.bus) game.bus.emit('melee:hit', { p, kind: m.kind, gun: w.gunId, res: m.res });
+    }
     if (m.t >= m.dur) { ws.ml = null; ws.state = 'idle'; ws.t = 0; }
     return;
   }
   if (ws.state === 'inspect') { if (ws.t >= ws.dur || (b & (MB.FIRE | MB.ADS))) { ws.state = 'idle'; ws.t = 0; } else return; }
   if (ws.cool > 0) return;
   let kind = null;
-  if (b & MB.ADS) kind = 'stab'; else if (b & MB.FIRE) kind = 'slash';
+  if ((pressed & MB.ALT) && spec.throw) kind = 'throw';
+  else if (b & MB.ADS) kind = 'stab'; else if (b & MB.FIRE) kind = 'slash';
   if (!kind) { if ((pressed & MB.INSPECT) && ws.state === 'idle') { ws.state = 'inspect'; ws.t = 0; ws.dur = INSPECT_TIME * 0.8; if (game.bus) game.bus.emit('inspect', { p }); } return; }
-  const s = kind === 'stab' ? spec.stab : spec.slash;
+  const s = kind === 'stab' ? spec.stab : kind === 'throw' ? { windup: spec.throw.windup || 0.45, rate: (spec.throw.windup || 0.45) + 0.3 } : spec.slash;
   ws.mlSide = kind === 'slash' ? 1 - ws.mlSide : ws.mlSide;
-  ws.ml = { kind, t: 0, hitAt: kind === 'stab' ? (s.windup || 0.25) : 0.11, dur: s.rate, hit: false, side: ws.mlSide, res: null };
+  ws.ml = { kind, t: 0, hitAt: kind === 'stab' || kind === 'throw' ? (s.windup || 0.25) : 0.11, dur: s.rate, hit: false, side: ws.mlSide, res: null };
   ws.state = 'melee'; ws.t = 0; ws.cool = s.rate; ws.seq++; p.spawnProtect = 0;
   if (game.bus) game.bus.emit('melee', { p, kind, gun: w.gunId, side: ws.mlSide });
 }
@@ -283,7 +335,7 @@ function nadeTick(game, p, dt, b, prevB) {
 export function weaponTick(game, p, cmd, dt) {
   const ws = p.ws, b = cmd.buttons | 0, prevB = ws.btn, pressed = b & ~prevB;
   ws.btn = b;
-  ws.t += dt; ws.since += dt; ws.cool -= dt; ws.dry = Math.max(0, ws.dry - dt);
+  ws.t += dt; ws.since += dt; ws.cool -= dt; ws.dry = Math.max(0, ws.dry - dt); ws.swT = (ws.swT || 0) + dt;
   if (ws.cyc > 0) ws.cyc = Math.max(0, ws.cyc - dt);
   if (cmd.slot) selectSlot(game, p, cmd.slot);
   if (p.cur === 'nade') { nadeTick(game, p, dt, b, prevB); recover(ws, null, dt); return; }
@@ -291,6 +343,11 @@ export function weaponTick(game, p, cmd, dt) {
   if (!w) { ws.ads = Math.max(0, ws.ads - dt * 4); if (ws.state === 'draw' && ws.t >= ws.dur) ws.state = 'idle'; return; }
   if (w.melee) { meleeTick(game, p, w, dt, b, pressed); return; }
   const st = statsOf(w);
+  if (st.cycle) cycleTick(game, p, w, st, dt);
+  // breath hold (Shift while aiming), sway, bipod
+  breathTick(ws, st, !!(b & MB.WALK), ws.ads, dt);
+  ws.bip = st.bipod && st.bipod < 1 && bipodRest(game, p) ? 1 : 0;
+  const sw = swayAt(st, ws, p, SW); ws.swX = sw.x; ws.swY = sw.y;
   if (pressed & B_MODE && st.modes && st.modes.length > 1 && (ws.state === 'idle' || ws.state === 'inspect')) {
     const i = st.modes.indexOf(w.fireMode); w.fireMode = st.modes[(i + 1) % st.modes.length]; ws.burst = 0;
     if (game.bus) game.bus.emit('firemode', { p, mode: w.fireMode });
@@ -305,7 +362,11 @@ export function weaponTick(game, p, cmd, dt) {
   }
   // ADS (not while drawing / reloading / climbing; a bolt or pump cycle drops you out and back in)
   const scoped = st.zoomLevels && st.zoomLevels.length > 1;
-  if ((pressed & MB.ALT) && scoped && ws.ads > 0.5) ws.zoomIdx = (ws.zoomIdx + 1) % st.zoomLevels.length;
+  if (pressed & MB.ALT) {
+    if (scoped && ws.ads > 0.5) ws.zoomIdx = (ws.zoomIdx + 1) % st.zoomLevels.length;
+    else if (st.thermal && ws.ads > 0.5) ws.thermal = ((ws.thermal | 0) + 1) % Math.max(1, (st.thermal.palettes || [0]).length);
+    else if (st.laser || st.light) { w.dev = w.dev === false; if (game.bus) game.bus.emit('device', { p, w, on: w.dev }); }
+  }
   const canAds = (ws.state === 'idle' || ws.state === 'inspect') && !p.mantle && !(st.cycle === 'bolt' && ws.cyc > 0);
   const wantAds = !!(b & MB.ADS) && canAds;
   if (wantAds && ws.state === 'inspect') { ws.state = 'idle'; ws.t = 0; }
@@ -343,15 +404,93 @@ export function weaponTick(game, p, cmd, dt) {
   recover(ws, st, dt);
 }
 
-function recover(ws, st, dt) {
-  const rec = st && st.recoil ? st.recoil.recover || 6 : 6;
-  const iv = st ? fireInterval(st) : 0.1;
-  ws.bloom *= Math.exp(-rec * dt);
-  if (ws.since > iv + 0.02) {
-    const k = Math.exp(-rec * dt);
-    ws.ax *= k; ws.ay *= k; ws.shots *= k;
-    if (ws.shots < 0.05) ws.shots = 0;
-    if (Math.abs(ws.ax) < 1e-4) ws.ax = 0; if (Math.abs(ws.ay) < 1e-4) ws.ay = 0;
+function recover(ws, st, dt) { recoverAim(ws, st, dt); }
+const SW = { x: 0, y: 0 };
+
+// ------------------------------------------------------------------------------------------------ bipod
+const BIP_O = { x: 0, y: 0, z: 0 }, BIP_D = { x: 0, y: -1, z: 0 }, BIP_R = { out: { hit: false, dist: 0, point: { x: 0, y: 0, z: 0 }, normal: { x: 0, y: 0, z: 0 }, surf: null, id: -1 } };
+/** the bipod can be deployed: crouched on the ground, or resting on a ledge in front of the gun (a surface .15-.5 m under the
+    eye within reach of the legs, 0.45-0.75 m ahead) */
+export function bipodRest(game, p) {
+  if (!p.onGround || p.mantle) return false;
+  const spd = Math.hypot(p.vel.x, p.vel.z); if (spd > 1.2) return false;
+  if ((p.crouch || 0) > 0.85 && Math.abs(p.pitch) < 0.5) return true;
+  if (!game.world) return false;
+  eyePos(p, BIP_O);
+  const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw), ey = BIP_O.y;
+  for (const d of [0.5, 0.7]) {
+    BIP_O.x = p.pos.x + fx * d; BIP_O.z = p.pos.z + fz * d; BIP_O.y = ey - 0.08;
+    const r = raycast(game.world, BIP_O, BIP_D, 0.5, BIP_R);
+    if (r.hit && r.normal.y > 0.7 && ey - r.point.y > 0.15 && ey - r.point.y < 0.5) return true;
+  }
+  return false;
+}
+
+// ------------------------------------------------------------------------------------------------ thrown melee (tomahawk)
+let thrownN = 0;
+function throwMelee(game, p, w, spec) {
+  const T = spec.throw, ws = p.ws;
+  eyePos(p, ORIGIN);
+  const yaw = p.yaw, pitch = p.pitch - 0.03, cp = Math.cos(pitch);
+  const dx = Math.sin(yaw) * cp, dy = -Math.sin(pitch), dz = Math.cos(yaw) * cp, sp = T.speed || 22;
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const t = { id: 't' + (++thrownN), w, from: p.id, x: ORIGIN.x + rx * 0.18 + dx * 0.3, y: ORIGIN.y - 0.05, z: ORIGIN.z + rz * 0.18 + dz * 0.3,
+    vx: dx * sp + p.vel.x * 0.5, vy: dy * sp + 1.2, vz: dz * sp + p.vel.z * 0.5, rot: 0, spin: T.spin || 12, yaw, t: 0, g: 9.8 * (T.gravity ?? 1) };
+  if (!game.thrown) game.thrown = [];
+  game.thrown.push(t);
+  p.inv.melee = null; ws.ml = null; ws.state = 'idle';
+  if (game.bus) game.bus.emit('melee:throw', { p, gun: w.gunId, thrown: t });
+  selectSlot(game, p, 'last') || selectSlot(game, p, 'next');
+}
+const TH_D = { x: 0, y: 0, z: 0 }, TH_HIT = { t: 0, shape: 0, group: 'chest', x: 0, y: 0, z: 0 };
+export function thrownTick(game, dt) {
+  const list = game.thrown; if (!list || !list.length) return;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const t = list[i]; t.t += dt;
+    const ox = t.x, oy = t.y, oz = t.z;
+    t.vy -= t.g * dt;
+    const mx = t.vx * dt, my = t.vy * dt, mz = t.vz * dt, L = Math.hypot(mx, my, mz) || 1e-6;
+    TH_D.x = mx / L; TH_D.y = my / L; TH_D.z = mz / L;
+    t.rot += t.spin * dt;
+    let land = null;
+    // players first (the thrower is immune for the first .2 s)
+    const from = game.players.get(t.from);
+    let best = L, victim = null;
+    for (const q of game.players.values()) {
+      if (!q.alive || (q.id === t.from && t.t < 0.25) || (from && !isEnemy(from, q) && q !== from)) continue;
+      const h = raycastPlayer(q, ox, oy, oz, TH_D.x, TH_D.y, TH_D.z, best, game.tick, TH_HIT);
+      if (h && h.t < best) { best = h.t; victim = q; land = { x: h.x, y: h.y, z: h.z, group: h.group }; }
+    }
+    const r = raycast(game.world, { x: ox, y: oy, z: oz }, TH_D, best + 0.05, BIP_R);
+    if (r.hit && r.dist <= best) {
+      victim = null;
+      land = { x: r.point.x - TH_D.x * 0.04, y: r.point.y - TH_D.y * 0.04, z: r.point.z - TH_D.z * 0.04, surf: r.surf, n: { ...r.normal } };
+      if (game.bus) game.bus.emit('impact', { point: { ...r.point }, normal: { ...r.normal }, surf: r.surf, gun: t.w.gunId, exit: false, shooter: from, melee: true, dir: { ...TH_D }, id: r.id });
+    }
+    if (victim) {
+      const spec = getGun(t.w.gunId), T = spec.throw || {};
+      const bx = (from ? from.pos.x : ox) - victim.pos.x, bz = (from ? from.pos.z : oz) - victim.pos.z, bl = Math.hypot(bx, bz) || 1;
+      const back = (Math.sin(victim.yaw) * bx + Math.cos(victim.yaw) * bz) / bl < Math.cos(110 * DEG);
+      const dmg = back ? (T.back || T.dmg) : T.dmg;
+      applyDamage(game, victim, { attacker: from || t.from, dmg, group: land.group === 'head' ? 'head' : 'chest', kind: 'melee', weapon: t.w.gunId,
+        armorPen: spec.armorPen ?? 0.9, point: { x: land.x, y: land.y, z: land.z }, dir: { ...TH_D }, backstab: back, noMult: true, thrown: true });
+      if (game.bus) game.bus.emit('bullet:body', { point: { x: land.x, y: land.y, z: land.z }, dir: { ...TH_D }, victim, group: 'chest', dmg, melee: true, friendly: false });
+      land = { x: land.x - TH_D.x * 0.3, y: land.y, z: land.z - TH_D.z * 0.3 };
+      t.vx *= -0.15; t.vz *= -0.15;
+    }
+    if (land || t.t > 6 || t.y < -200) {
+      list.splice(i, 1);
+      if (t.y < -200) continue;
+      // becomes a world drop where it stopped (stuck in a wall: it hangs there; a body hit: it falls)
+      const d = { id: 'd' + (++dropN), w: t.w, from: t.from, x: land ? land.x : t.x, y: land ? land.y : t.y, z: land ? land.z : t.z, vx: 0, vy: victim ? -0.5 : 0, vz: 0,
+        yaw: t.yaw, spin: 0, t: 1.7, rest: !victim && !!(land && land.surf), stuck: !!(land && land.n), roll: t.rot };
+      if (land && land.n && land.n.y > 0.6) d.stuck = false;
+      game.drops.push(d);
+      while (game.drops.length > 24) game.drops.shift();
+      if (game.bus) game.bus.emit('drop', { p: from, drop: d, thrown: true });
+      continue;
+    }
+    t.x += mx; t.y += my; t.z += mz;
   }
 }
 

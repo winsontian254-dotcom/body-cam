@@ -476,7 +476,8 @@ class SoundSystem {
     const L = p => !!(p && p.local), pos = p => ({ x: p.pos.x, y: p.pos.y + 1.4, z: p.pos.z });
     const A = Audio, on = (n, f) => game.bus.on(n, e => { try { f(e); } catch (er) { /* audio must never break the game */ } });
     this.offs = [
-      on('shot', e => A.gun(e.gun.sound || 'rifle_556', { pos: e.origin, suppressed: e.suppressed, local: L(e.p), distant: false, gun: e.gun, id: e.p.id })),
+      on('shot', e => A.gun(e.gun.sound || 'rifle_556', { pos: e.origin, suppressed: e.suppressed, local: L(e.p), distant: false, gun: e.gun, id: e.p.id,
+        cycleSound: !!(e.p.remote || (game.authority === 'client' && !e.p.local)) })),   // simulated players send 'cycle' steps (viewmodel.js plays them)
       on('dry', e => { if (L(e.p)) A.dry(e.gun && statsOf(e.gun) ? statsOf(e.gun).sound : 'pistol_9'); }),
       on('reload', e => { const st = e.gun && statsOf(e.gun); A.reload(e.stage, st ? st.sound : 'rifle_556', { pos: pos(e.p), local: L(e.p), gun: st, id: e.p.id }); }),
       on('footstep', e => A.step(e.surf, { pos: { x: e.p.pos.x, y: e.p.pos.y, z: e.p.pos.z }, local: L(e.p), speed: e.loud, crouch: e.p.crouch > 0.5, id: e.p.id })),

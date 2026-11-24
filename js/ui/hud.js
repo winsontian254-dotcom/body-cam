@@ -269,7 +269,7 @@ export class Hud {
       if (this.cache.gapv !== gr) { this.cache.gapv = gr; $.xh.style.setProperty('--xh-gap', gr + 'px'); }
     }
     // ---- scope overlay (fallback)
-    this.cls('scope', $.scope, 'on', !!scoped);
+    this.cls('scope', $.scope, 'on', !!scoped && !g.scopeView);   // js/game/scopeview.js draws the real one
     // ---- hit marker
     this.hitT += dt;
     const hitOn = this.hitT < (this.hitKind === 'kill' ? 0.45 : 0.22);

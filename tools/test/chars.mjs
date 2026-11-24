@@ -212,8 +212,8 @@ async function main() {
       const res = await page.evaluate(() => {
         const g = LF.game; C.hideAll();
         const killer = C.place(C.P[0], 0, -16, 0, { gun: 'purga' });
-        // stairs in the main building (x -5.2..0.4 along +x at z 6.6, y .12 -> 3.32), a wall (the building's south face z = -8)
-        const sy = g.world.groundAt(-2.6, 6.6, 2.6, 0.3), a = C.place(C.P[1], -2.6, 6.6, -Math.PI / 2, { gun: 'purga', y: sy ? sy.y : 0 }), b = C.place(C.P[2], 3, -9.0, Math.PI, { gun: 'warden' }), c = C.place(C.P[3], -14, -16, 0.3, { gun: 'spatz', vx: 0, vz: 5.5 });
+        // the stairs in the main building (x -6.5..-3 at z 6.5..7, climbing +x), a wall (the building's south face z = -8)
+        const sy = g.world.groundAt(-4.5, 6.75, 2.8, 0.1), a = C.place(C.P[1], -4.5, 6.75, -Math.PI / 2, { gun: 'purga', y: sy ? sy.y : 0 }), b = C.place(C.P[2], 3, -9.0, Math.PI, { gun: 'warden' }), c = C.place(C.P[3], -14, -16, 0.3, { gun: 'spatz', vx: 0, vz: 5.5 });
         C.run(20);
         const kill = (v, dir, group) => { g.bus.emit('hit', { attacker: killer, victim: v, dmg: 60, group, dir, point: { ...v.pos } }); v.alive = false; g.bus.emit('kill', { killer, victim: v, weapon: 'purga', headshot: group === 'head' }); };
         kill(a, { x: 1, y: 0, z: 0 }, 'chest'); kill(b, { x: 0, y: 0, z: 1 }, 'head'); kill(c, { x: 0, y: 0, z: 1 }, 'chest');
@@ -232,7 +232,7 @@ async function main() {
       check(res.out.every(k => k.below === 0), 'ragdolls stay above the floor / stairs');
       check(res.out.every(k => k.asleep), 'ragdolls settle and sleep within 5 s');
       check(res.out[1] && res.out[1].pelvis[2] < -8.05, 'the body shot toward the wall stays outside it (pelvis z ' + (res.out[1] && res.out[1].pelvis[2]) + ')');
-      await page.evaluate(() => C.cam([0.5, 2.6, 3.2], [-2.6, 1.0, 6.6], 0.8)); await frames(page, 3); await shot(page, 'chars-ragdoll-stairs');
+      await page.evaluate(() => C.cam([-8.2, 1.5, 6.3], [-4.2, 2.6, 6.75], 0.9)); await frames(page, 3); await shot(page, 'chars-ragdoll-stairs');
       await page.evaluate(() => C.cam([5.5, 1.6, -12.5], [3, 0.3, -8.8], 0.8)); await frames(page, 3); await shot(page, 'chars-ragdoll-wall');
       await page.evaluate(() => C.cam([-11.5, 1.6, -15], [-14, 0.2, -13.5], 0.8)); await frames(page, 3); await shot(page, 'chars-ragdoll-run');
       // round reset clears the corpses

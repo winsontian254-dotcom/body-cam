@@ -18,7 +18,7 @@
      North strip (z 31..48): workers' car park, portaloos, spoil heap + excavator, skips: the north flank T1 -> A / T2.
    Out of bounds: streets and the city (offices, brick terraces, a glass tower) all round. Prefabs: js/maps/kit_construction.js.
    Notes: tools/test/out/notes-map-construction.md */
-import { kit, decal, paint, pave, railing, stair, deck, fence, finish, farGround, rng, YEL, WHT, RED,
+import { kit, decal, paint, pave, railing, stair, deck, fence, finish, farGround, skirt, rng, YEL, WHT, RED,
   shoring, scaffold, stairTower, edgeGuard, hoarding, festoon, workLight, portaloo, skip, excavator, mixerTruck, towerCrane,
   cityBuilding, concretePipes, plyStack, beamStack, lightTower, hcol } from '../kit_construction.js';
 
@@ -32,16 +32,20 @@ const VOID = [-11.6, 17.2, -6.4, 27];                             // L2 slab voi
 const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
 const mound = (x, z) => { const d = Math.hypot((x - 20) / 7.5, (z - 39) / 5); return d < 1 ? 2.4 * (.5 + .5 * Math.cos(PI * d)) : 0; };
 const BLOCK = 'concrete_panels';
+// The map is built in a frame offset by (OX, OZ) so the play area and the city sit in ONE 1024 m geometry chunk (the world origin
+// would split it into four): one merged mesh per material. Every coordinate in this file is local (plan above).
+const OX = 512, OZ = 512;
 
 export default {
-  id: 'construction', name: 'Skyline Phase II', size: 'M', chunk: 64,
+  id: 'construction', name: 'Skyline Phase II', size: 'M', chunk: 1024,
   desc: 'City-block construction site on a bright day: a three-storey concrete frame with a stair core and scaffold towers, a tower crane over the haul road, the fenced material yard and the site cabins.',
   env: { hdri: 'partly_cloudy', sky: 'hdri', time: 'day', exposure: 1.0, sun: { dir: [.42, -.78, .46], color: [1, .96, .9], intensity: 1 },
-    fog: { color: [.7, .76, .84], density: .0018 }, weather: 'clear', wind: [2.5, 1], ambience: 'construction', reverb: 'outdoor', indoorIbl: .32, puddles: .15 },
-  bounds: { minX: -64, maxX: 64, minZ: -52, maxZ: 52, minY: -3, maxY: 60 },
+    fog: { color: [.7, .76, .84], density: .0018 }, weather: 'clear', wind: [2.5, 1], ambience: 'construction', reverb: 'outdoor', indoorIbl: .42, puddles: .15 },
+  bounds: { minX: -64 + OX, maxX: 64 + OX, minZ: -52 + OZ, maxZ: 52 + OZ, minY: -3, maxY: 60 },
 
   build(B) {
-    const R = rng(4242);
+    B.push(OX, 0, OZ);
+    const R = rng(4242)
     const CASTS = new Set(['container', 'container_40', 'site_cabin', 'crate_stack', 'dumpster', 'generator', 'car', 'box_truck', 'semi_trailer', 'truck_tractor', 'forklift', 'rack']);
     const prop0 = B.prop.bind(B);
     B.prop = (type, x, y, z, o = {}) => prop0(type, x, y, z, Object.assign({ cast: CASTS.has(type) }, o));
@@ -56,7 +60,7 @@ export default {
       [-60, -48, -44, -38, 'asphalt'],                       // entrance pen
       [-44, -48, 60, -34, 'concrete_floor'],                 // south road (hardstanding)
       [28, -34, 60, 6, 'concrete_floor'],                    // material yard slab
-      [-24, -34, 28, 2, 'gravel'],                           // haul road / mid
+      [-24, -34, 28, 2, 'dirt'],                             // haul road / mid
       [11.6, 32.4, 28.4, 45.6, 'none'],                      // spoil heap (own heightfield)
       [-60, 32, -30, 48, 'asphalt'],                         // car park
       [-30, 30, 36, 48, 'dirt'],                             // north strip
@@ -115,6 +119,11 @@ export default {
     B.light({ x: 44, y: 2.95, z: 38, intensity: 6, fixture: false, color: [1, .95, .88] });
     B.light({ x: 51, y: 2.95, z: 38, intensity: 6, fixture: false, color: [1, .95, .88] });
     decal(B, 'sign', 'canteen', 47, 3.25, 33.91, 3.2, .29, { face: 's' });
+    skirt(B, 38.15, 41.85, 55.85, 41.85, .15, { mat: 'p_paint_darkgrey' }); skirt(B, 55.85, 34.15, 55.85, 41.85, .15, { mat: 'p_paint_darkgrey' });
+    skirt(B, 38.15, 34.15, 55.85, 34.15, .15, { mat: 'p_paint_darkgrey', gaps: [[3.6, 6.4], [11.6, 14.4]] }); skirt(B, 38.15, 34.15, 38.15, 41.85, .15, { mat: 'p_paint_darkgrey', gaps: [[2.6, 5.4]] });
+    { const K = kit(B, 38.3, 40.5, true); K.box('wood_dark', 38.2, 1.55, 40.6, .04, .1, 1.6); for (let i = 0; i < 5; i++) { const z = 39.95 + i * .32; K.box('steel_dark', 38.27, 1.5, z, .1, .03, .03);
+      K.blob(i % 3 ? 'p_plastic_yellow' : 'plastic_white', 38.36, 1.6, z, .13, .1, .15, { seg: 8, flat: .45 }); K.box('p_fab_tan', 38.25, .9, z, .03, .55, .26); } }
+    decal(B, 'sign', 'rules', 55.83, 1.55, 35.2, .9, 1.25, { face: 'w' });
     decal(B, 'sign', 'first', 55.9, 2.5, 39.5, 1.6, .15, { face: 'e' });
     // roof: two office cabins, and the walkway deck along the south face reached by a stair from the west
     B.prop('site_cabin', 42.2, 3.1, 38.4, { ry: PI, variant: 'cream', interior: true });
@@ -213,18 +222,22 @@ export default {
     B.prop('scaffolding', -6, L0, 13.5, { ry: H, bays: 1, levels: 1 });
     box(-0.6, L0, 21.4, .6, 1.3, .3, 'p_coat_yellow');                                       // site distribution board on the core
     workLight(B, 2, L0, 9, PI * .9); workLight(B, 20, L1, 25, PI * 1.2);
+    B.prop('field_desk', 12.5, L0, 26.2, { ry: PI });
+    { const K = kit(B, 8, 25); for (const [x, z, r] of [[8.2, 26.6, .5], [9.4, 26.8, .4]]) { K.cylX('wood_planks', x - .3, x + .3, L0 + r, z, r, { seg: 14 }); K.cylX('p_plastic_orange', x - .26, x + .26, L0 + r, z, r * .7, { seg: 14 }); }
+      B.box(8.8, L0, 26.7, 2, .9, .9, { visible: false, surf: 'wood' }); }
+    B.prop('drum', -9.5, L0, 4.8, { n: 2, variant: 'green', fallen: true });
     festoon(B, [[-11, L1 - .45, 7], [-6, L1 - .35, 7], [0, L1 - .45, 7], [6, L1 - .35, 7], [12, L1 - .45, 7], [18, L1 - .35, 7], [23.5, L1 - .45, 7]]);
     festoon(B, [[-11, L1 - .45, 25], [-6, L1 - .35, 25], [0, L1 - .45, 25], [6, L1 - .35, 25], [12, L1 - .45, 25], [18, L1 - .35, 25], [23.5, L1 - .45, 25]]);
     festoon(B, [[-11, L2 - .45, 13], [-6, L2 - .35, 13], [-.5, L2 - .45, 10.6], [10.5, L2 - .45, 10.6], [18, L2 - .35, 13], [23.5, L2 - .45, 13]]);
     festoon(B, [[-11, L2 - .45, 25], [-6, L2 - .35, 25], [0, L2 - .45, 23], [6, L2 - .35, 23], [12, L2 - .45, 25], [18, L2 - .35, 25], [23.5, L2 - .45, 25]]);
     festoon(B, [[-11, L3 - .45, 7], [-3, L3 - .35, 7], [6, L3 - .45, 7], [14, L3 - .35, 7], [23.5, L3 - .45, 7]]);
-    for (const [x, y, z] of [[-3, L0, 8], [9, L0, 8], [18, L0, 20], [-6, L0, 20], [-3, L1, 7], [13, L1, 7], [-2, L1, 25], [16, L1, 25], [5, L2, 7], [-6, L2, 9]])
-      B.light({ x, y: y + 3.6, z, intensity: 3.2, color: [1, .82, .6], fixture: false, range: 9 });
+    for (const [x, y, z] of [[-3, L0, 8], [9, L0, 8], [18, L0, 20], [-6, L0, 20], [-3, L1, 7], [13, L1, 7], [-2, L1, 25], [16, L1, 25], [-7, L1, 13.2], [17, L1, 16], [5, L1, 24], [5, L2, 7], [-6, L2, 9]])
+      B.light({ x, y: y + 3.6, z, intensity: y === L1 ? 9 : 6, color: [1, .82, .6], fixture: false, range: 12 });
     // building signage
     decal(B, 'sign', 'edge', 6, L1 + 1.9, BZ0 - .02, 3.2, .3, { face: 's' });
     decal(B, 'sign', 'edge', 6, L2 + 1.9, BZ0 - .02, 3.2, .3, { face: 's' });
     // scaffold on the north face (debris netting at the top lift), a material hoist on the south face
-    scaffold(B, BX1, BZ1 + .05, BX0, BZ1 + .05, { lifts: [L1, L2, L3], top: L3 + 1.2, net: [L2 + .2, L3 + 1.2] });
+    scaffold(B, BX1, BZ1 + .05, BX0, BZ1 + .05, { lifts: [L1, L2, L3], top: L3 + 1.2, net: [L2 + .2, L3 + 1.2], netMat: 'chainlink' });
     {
       const K = kit(B, 15, 2.4), hx = 15, hzc = 2.6;
       for (let y = 0; y < L3 + 3; y += 1.5) { for (const [a, b] of [[-.3, -.3], [.3, -.3], [.3, .3], [-.3, .3]]) K.box('p_coat_yellow', hx + a - .03, y, hzc + b - .03, .06, 1.5, .06); K.box('p_coat_yellow', hx, y + 1.45, hzc, .66, .05, .66); }
@@ -240,7 +253,7 @@ export default {
     const FH = 4 - SL - .1, bw = (x0, z0, x1, z1, o = {}) => B.wall(x0, z0, x1, z1, { y: L1, h: o.h || FH, t: .2, mat: BLOCK, mat2: BLOCK, openings: o.op });
     bw(BX0 + .3, 10, -1.2, 10, { op: [{ at: 3.2, w: 1.1, h: 2.1 }, { at: 8.6, w: 1.1, h: 2.1 }] });
     bw(-6, 16.6, -6, BZ1 - .3, { op: [{ at: 3.2, w: 1.1, h: 2.1 }, { at: 8.8, w: 1.1, h: 2.1 }] });
-    bw(BX0 + .3, 16.4, -6.1, 16.4, { h: 1.25 });
+    bw(BX0 + .3, 16.4, -8.2, 16.4, { h: 1.25 });
     bw(16, BZ0 + .3, 16, 10, { op: [{ at: 3.0, w: 1.1, h: 2.1 }] });
     bw(10.2, 22, BX1 - .3, 22, { op: [{ at: 2.6, w: 1.1, h: 2.1 }, { at: 9.4, w: 1.2, h: 2.1 }] });
     bw(16.1, 10.2, 22.5, 10.2, { h: 1.45 });
@@ -266,6 +279,8 @@ export default {
     box(2.4, L2 + 1.25, 24, .3, .5, .08, 'p_coat_yellow', { collide: false });
     B.prop('crate_stack', 10.6, L2, 25.8, { n: 4 }); B.prop('cardboard_box', -1.5, L2, 7, { variant: 'pile', n: 4 });
     workLight(B, 9.5, L2, 21.5, -2.4);
+    decal(B, 'sign', 'A', 4, L2 + 1.5, 11.83, 1.3, 1.3, { face: 's' }); decal(B, 'sign', 'A', 10.17, L2 + 1.4, 16.5, 1.2, 1.2, { face: 'e' });
+    decal(B, 'sign', 'A', 14, L2 + .014, 16, 2.2, 2.2, { face: 'u' });
     for (const [x, z] of [[4, 18], [12, 20], [8, 9]]) decal(B, 'stain', R() < .5 ? 'patch' : 'dust', x, L2 + .012, z, 3.4, 3.4, { face: 'u', ry: R() * PI });
     decal(B, 'stain', 'water', 6, L2 + .012, 26, 4, 3, { face: 'u' });
 
@@ -273,7 +288,7 @@ export default {
     towerCrane(B, 6, -9, 38, .62, { jib: 52, cjib: 16, trolley: 30, hookY: 22 });
     decal(B, 'sign', 'crane', 6, 2.0, -10.08, 1.9, .2, { face: 's' });
     mixerTruck(B, -6.5, -16, .35);
-    skip(B, 17.5, -23.5, .25); skip(B, -1.5, -27.5, H + .1, { mat: 'p_coat_blue' });
+    skip(B, 17.5, -23.5, .25); skip(B, -11.5, -30, H + .1, { mat: 'p_coat_blue' });
     concretePipes(B, 19, -9.5, .05, 3);
     plyStack(B, 15, -1.2, .08, .7, { beams: true });
     beamStack(B, -10.8, -4.5, .1, 3);
@@ -281,8 +296,7 @@ export default {
     B.prop('generator', 23.2, 0, -4.2, { ry: -H, variant: 'yellow' });
     B.prop('pallet', -14.6, 0, -17, { variant: 'bricks', stack: 1 }); B.prop('pallet', -14.8, 0, -18.4, { variant: 'bricks', stack: 1 });
     B.prop('pallet', 10.8, 0, -18.2, { variant: 'sacks', stack: 2 });
-    B.prop('jersey_barrier', 8.5, 0, -29.2, { len: 3 }); B.prop('jersey_barrier', 3, 0, -21.5, { ry: .15 });
-    B.prop('cone', 6.3, 0, -28.7, { variant: 'drum' }); B.prop('cone', 11.2, 0, -28.8, { variant: 'drum' });
+    B.prop('jersey_barrier', 8.5, 0, -29.2, { len: 3 });     B.prop('cone', 6.3, 0, -28.7, { variant: 'drum' }); B.prop('cone', 11.2, 0, -28.8, { variant: 'drum' });
     // concrete washout bay
     for (const [x, z, w, d] of [[-14.5, -24.5, 4.4, .3], [-14.5, -27.9, 4.4, .3], [-16.55, -26.2, .3, 3.1]]) box(x, 0, z, w, .7, d, 'p_concrete_precast');
     box(-14.3, 0, -26.2, 3.8, .2, 3.1, 'concrete_dark', { collide: false });
@@ -292,6 +306,34 @@ export default {
     for (let i = 0; i < 9; i++) decal(B, 'stain', i % 2 ? 'tyre' : 'tyre2', -14 + i * 4.5, .013, -13 + R() * 6, 4.6, 1.6, { face: 'u', ry: R() * .3 });
     for (const [x, z] of [[-8, -20], [4, -3], [12, -14], [-2, -10], [20, -16]]) decal(B, 'stain', ['oil0', 'oil2', 'drip'][(R() * 3) | 0], x, .013, z, 2.4, 2.4, { face: 'u', ry: R() * PI });
     lightTower(B, -19, -1.5, .4);
+    // aggregate bays: interlocking precast blocks, three bays open to the north with sand / gravel / ballast heaps
+    {
+      const K = kit(B, 2, -23), zb = -25, zf = -20.6;
+      box(2, 0, zb, 12.8, 2.4, .8, 'p_concrete_precast');
+      for (const x of [-4, 0, 4, 8]) box(x, 0, (zb + zf) / 2 + .2, .8, 2.4, zf - zb - .4, 'p_concrete_precast');
+      for (const y of [.8, 1.6]) { K.box('concrete_dark', 2, y - .01, zb - .41, 12.8, .02, .01); K.box('concrete_dark', 2, y - .01, zb + .41, 12.8, .02, .01); }
+      for (let i = 0; i < 8; i++) for (let r = 0; r < 3; r++) K.box('concrete_dark', -4 + i * 1.6 + (r % 2) * .8, r * .8, zb - .41, .02, .8, .01);
+      for (const x of [-4, 0, 4, 8]) for (const y of [.8, 1.6]) for (const s of [-1, 1]) K.box('concrete_dark', x + s * .41, y - .01, (zb + zf) / 2 + .2, .01, .02, zf - zb - .4);
+      for (const [x, m] of [[-2, 'sand'], [2, 'gravel'], [6, 'p_ballast']]) {
+        K.blob(m, x, 0, -23.2, 1.7, 1.25, 1.9, { seg: 10, noise: .18, seed: (x * 7) | 0, flat: .5 });
+        B.box(x, 0, -23.4, 3, .7, 2.6, { visible: false, surf: 'dirt' });
+      }
+      decal(B, 'sign', 'keep', 2, 2.0, zb - .42, 2.2, .24, { face: 's' });
+    }
+    // cement silo on legs (crouch under the cone)
+    {
+      const x = 17, z = -15.5, K = kit(B, x, z);
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { K.box('p_paint_grey', x + a * 1.05 - .1, 0, z + b * 1.05 - .1, .2, 3.4, .2); B.collider({ cx: x + a * 1.05, cy: 1.7, cz: z + b * 1.05, hx: .12, hy: 1.7, hz: .12, surf: 'metal' }); }
+      for (const y of [.6, 2.2]) { K.box('p_paint_grey', x, y, z - 1.05, 2.2, .08, .08); K.box('p_paint_grey', x, y, z + 1.05, 2.2, .08, .08); K.box('p_paint_grey', x - 1.05, y, z, .08, .08, 2.2); K.box('p_paint_grey', x + 1.05, y, z, .08, .08, 2.2); }
+      K.lathe('p_coat_white', [[.25, 1.3], [1.45, 3.2], [1.45, 13], [1.2, 13.4], [.35, 13.6]], { seg: 20 });
+      K.cyl('p_galv', x, 13.6, z, .3, .5, { seg: 8 });
+      K.box('steel_dark', x + 1.52, 3.2, z, .04, 10.4, .4); K.box('p_galv', x, 13.4, z, 3.2, .05, 3.2);
+      K.box('p_coat_red', x, 7.5, z - 1.47, 1.8, .6, .02);
+      K.tube('p_galv', [[x - .2, 1.3, z], [x - .2, .9, z - .6], [x - .2, .5, z - 2.6]], .12, { seg: 8 });
+      B.cyl(x, 3.2, z, 1.45, 10, { mat: 'p_coat_white', sides: 16, caps: false, collide: true, visible: false });
+      B.collider({ cx: x, cy: 2.3, cz: z, hx: .9, hy: .95, hz: .9, surf: 'metal' });
+      decal(B, 'sign', 'brand', x, 8.3, z - 1.47, 2.4, .2, { face: 's' });
+    }
 
     // ================================================================ SOUTH ROAD + the container wall (gaps: west, mid, east)
     cont(-35, 0, -33.2, H, 40, 'blue'); cont(-38, 2.59, -33.2, H, 20, 'red');
@@ -310,6 +352,8 @@ export default {
     B.box(-4.4, 1.3, -44.6, 11.6, .4, 2.2, { visible: false, surf: 'metal' });
     B.prop('box_truck', 31, 0, -44.2, { ry: -H, variant: 'logo' });
     B.prop('truck_tractor', 4.4, 0, -44.6, { ry: H, variant: 'white' });
+    B.prop('site_cabin', 18, 0, -40.6, { ry: PI, variant: 'grey' });                          // gate 2 delivery checkpoint
+    decal(B, 'sign', 'deliv', 18, 2.3, -38.78, 2.6, .23, { face: 'n' });
     for (const [x, z] of [[-30, -40], [-12, -38], [14, -41], [40, -42], [52, -38]]) decal(B, 'stain', R() < .5 ? 'tyre' : 'tyre2', x, .013, z, 5, 1.8, { face: 'u', ry: R() * .2 });
     paint(B, -43.5, -35.4, 26, -35.4, { col: YEL, w: .12 });
     paint(B, -43.5, -36.6, 26, -36.6, { col: YEL, w: .12 });
@@ -368,6 +412,7 @@ export default {
     plyStack(B, -32, 18, .3, .8); beamStack(B, -36.5, 21, H + .1, 4);
     concretePipes(B, -50, 14, H, 2, .6);
     B.prop('crate_stack', -55.5, 0, 6, { n: 5 });
+    cont(-46.5, 0, 21.5, H, 40, 'red'); plyStack(B, -46, 25, 0, .7, { beams: true });
     B.prop('ibc_tank', -57.8, 0, -10, { variant: 'blue' }); B.prop('ibc_tank', -57.8, 0, -11.3, { variant: 'blue' });
     B.prop('gas_cylinder', -47.6, 0, -11.2, { rack: true, variant: 'propane' });
     lightTower(B, -30, -27, -.5);
@@ -388,9 +433,9 @@ export default {
     for (const [x, z] of [[-45, -2], [-36, 25], [-56, -20], [-30, 10]]) decal(B, 'stain', R() < .5 ? 'tyre2' : 'oil1', x, .013, z, 4, 2, { face: 'u', ry: R() * PI });
 
     // ================================================================ NORTH STRIP: car park, portaloos, spoil heap, excavator
-    const carT = ['sedan', 'hatch', 'suv', 'pickup', 'van'];
-    for (let i = 0; i < 6; i++) B.prop('car', -56.4 + i * 3.1, 0, 45, { ry: 0, variant: carT[(i * 3 + 1) % 5] });
-    for (let i = 0; i < 5; i++) if (i !== 2) B.prop('car', -55 + i * 3.6, 0, 34.8, { ry: PI, variant: carT[(i * 2) % 5] });
+    const carT = ['sedan', 'hatch', 'suv', 'pickup', 'van'], CARC = ['silver', 'white', 'grey', 'navy', 'red', 'black', 'beige'];
+    for (let i = 0; i < 6; i++) B.prop('car', -56.4 + i * 3.1, 0, 45, { ry: 0, variant: carT[(i * 3 + 1) % 5], seed: 11, color: CARC[i % CARC.length] });
+    for (let i = 0; i < 5; i++) if (i !== 2) B.prop('car', -55 + i * 3.6, 0, 34.8, { ry: PI, variant: carT[(i * 2) % 5], seed: 11, color: CARC[(i + 3) % CARC.length] });
     for (let i = 0; i <= 6; i++) paint(B, -57.95 + i * 3.1, 42.4, -57.95 + i * 3.1, 47.7, { col: WHT, w: .1 });
     for (let i = 0; i <= 5; i++) paint(B, -56.8 + i * 3.6, 32.2, -56.8 + i * 3.6, 37.4, { col: WHT, w: .1 });
     for (let i = 0; i < 5; i++) portaloo(B, -27.5 + i * 1.3, 46.9, PI, i === 3 ? 'p_plastic_green' : 'p_plastic_blue');
@@ -398,11 +443,12 @@ export default {
     skip(B, -13.5, 44.6, H + .05);
     B.prop('pallet', -4, 0, 45.6, { variant: 'pipes', stack: 1 }); B.prop('pallet', -2.6, 0, 45.6, { variant: 'cylinders', stack: 1 });
     excavator(B, 9.5, 41, H + .15, { slew: -.4 });
-    for (const [x, z] of [[18, 37], [22, 41], [15.5, 40.8]]) B.prop('grass_tall', x, null, z, { variant: 'dry', w: 3.4, d: 2.6, h: 1.0 });
+    for (const [x, z] of [[18, 37], [22, 41], [15.5, 40.8]]) B.prop('grass_tall', x, null, z, { variant: 'dry', w: 3.4, d: 2.6, h: 1.0, seed: 5 });
     for (const [x, z] of [[-8, 46.8], [30, 46.6], [-30, 31.5]]) B.prop('bush', x, 0, z, { variant: 'shrub' });
     B.prop('trash_bag', -19.6, 0, 47.2, { n: 4 });
     B.prop('rebar_bundle', -2, 0, 32, { ry: H, len: 6 }); B.prop('rebar_bundle', -2.1, 0, 33.1, { ry: H, len: 6 });
     plyStack(B, 4, 33, -.1, .5);
+    cont(-18, 0, 38.6, .15, 20, 'blue'); B.prop('pallet', -15.6, 0, 36.2, { variant: 'bricks', stack: 1 });
     decal(B, 'sign', 'muster', -45, 1.6, 47.93, 2.6, .23, { face: 's' });
     for (const [x, z] of [[-45, 39.6], [-38, 39.6], [-10, 38], [2, 40]]) decal(B, 'stain', R() < .5 ? 'oil0' : 'tyre2', x, .013, z, 3, 2, { face: 'u', ry: R() * PI });
 
@@ -410,7 +456,12 @@ export default {
     B.prop('site_cabin', 33.6, 0, 25.8, { ry: 0, variant: 'cream', interior: true });
     B.prop('site_cabin', 33.6, 2.64, 25.8, { ry: 0, variant: 'cream' });
     B.prop('site_cabin', 42.4, 0, 25.8, { ry: 0, variant: 'blue' });
-    decal(B, 'sign', 'office', 33.6, 2.35, 27.63, 1.8, .16, { face: 'n' });
+    // steel stair and landing to the upper office cabin
+    stair(B, { x: 29.7, z: 25.75, w: 1.0, len: 4.3, y0: 0, y1: 2.64, dir: '+z', rails: 'left' });
+    deck(B, 29.15, 27.62, 37.2, 28.85, 2.64, { beamMat: 'p_paint_grey' });
+    { const K = kit(B, 33, 28.2); for (const x of [29.3, 33.2, 37.05]) { K.box('p_paint_grey', x, 0, 28.7, .1, 2.38, .1); B.collider({ cx: x, cy: 1.19, cz: 28.7, hx: .06, hy: 1.19, hz: .06, surf: 'metal' }); } }
+    railing(B, 29.15, 28.85, 37.2, 28.85, 2.64); railing(B, 37.2, 27.62, 37.2, 28.85, 2.64);
+    decal(B, 'sign', 'office', 33.6, 2.02, 27.63, 1.8, .16, { face: 'n' });
     decal(B, 'sign', 'brand', 33.6, 4.6, 24.0, 3.4, .3, { face: 's' });
     B.prop('generator', 55.5, 0, 22, { ry: -H, variant: 'yellow' });
     B.prop('tank', 55.6, 0, 14, { variant: 'horizontal', len: 3.6, r: .75 });
@@ -435,6 +486,9 @@ export default {
     concretePipes(B, 36.5, -18.5, 0, 3, .55);
     for (let i = 0; i < 3; i++) B.prop('rebar_bundle', 48 + i * 1.15, 0, -13.5, { ry: 0, len: 6 });
     cont(55.6, 0, -8, -H, 20, 'rust', 'open');
+    cont(45.5, 0, -17.6, .12, 20, 'blue');
+    decal(B, 'sign', 'B', 52.43, 1.45, -8.6, 1.3, 1.3, { face: 'w' }); decal(B, 'sign', 'B', 36.5, 1.45, -30.34, 1.3, 1.3, { face: 'n' });
+    decal(B, 'sign', 'B', 43, .015, -10, 2.2, 2.2, { face: 'u' });
     B.prop('forklift', 40.5, 0, -13, { ry: .55, variant: 'yellow' });
     B.prop('ibc_tank', 50.8, 0, -1.2, { variant: 'white' }); B.prop('ibc_tank', 52.1, 0, -1.2, { variant: 'white' });
     B.prop('pallet', 35, 0, -6, { variant: 'bricks', stack: 2 }); B.prop('pallet', 35, 0, -7.4, { variant: 'bricks', stack: 1 }); B.prop('pallet', 36.4, 0, -6.1, { variant: 'wrap', stack: 1 });
@@ -456,9 +510,9 @@ export default {
     ];
     for (const [x, z, w, d, h, style, o] of city) cityBuilding(B, x, z, w, d, h, { style, ...(o || {}) });
     for (const [x, z, ry] of [[-30, -55.6, 0], [0, -55.6, 0], [30, -55.6, 0], [-30, 55.6, PI], [10, 55.6, PI], [40, 55.6, PI], [-67.6, 0, H], [67.6, 10, -H], [67.6, -30, -H]]) B.prop('street_light', x, 0, z, { ry, variant: 'single', on: false });
-    for (const [x, z, ry] of [[-20, -58.2, H], [14, -58.2, -H], [-36, 58.2, H], [24, 58.2, -H], [70, 30, 0], [-70, -12, PI]]) B.prop('car', x, 0, z, { ry });
+    for (const [x, z, ry] of [[-20, -58.2, H], [14, -58.2, -H], [-36, 58.2, H], [24, 58.2, -H], [70, 30, 0], [-70, -12, PI]]) B.prop('car', x, 0, z, { ry, variant: 'sedan', seed: 11, color: CARC[(x * 7 + z) & 3] });
     B.prop('bus_shelter', 44, 0, -57, { ry: PI });
-    for (const [x, z] of [[-48, -55.2], [12, -55.2], [-20, 55.2], [-66.8, 30], [66.8, -10]]) B.prop('tree', x, 0, z, { variant: 'poplar', h: 9 });
+    for (const [x, z] of [[-48, -55.2], [12, -55.2], [-20, 55.2], [-66.8, 30], [66.8, -10]]) B.prop('tree', x, 0, z, { variant: 'poplar', h: 9, seed: 3 });
     decal(B, 'sign', 'banner1', -20, 1.3, -48.06, 10, 2.0, { face: 's' });
     decal(B, 'sign', 'banner2', 20, 1.3, -48.06, 10, 2.0, { face: 's' });
     decal(B, 'sign', 'homes', 0, 2.05, -48.06, 7, .62, { face: 's' });
@@ -469,28 +523,48 @@ export default {
     decal(B, 'sign', 'street2', 60.06, 2.2, 10, 2.0, .18, { face: 'e' });
     for (const [z0, z1, x] of [[-52, 52, -66], [-52, 52, 66]]) paint(B, x, z0, x, z1, { col: WHT, w: .12, dash: [3, 3], y: -.015 });
 
+    // ================================================================ grime, cracks, litter (atlas decals; seeded scatter per area)
+    const scatter = (x0, z0, x1, z1, n, slots, sz, y = .013) => { for (let i = 0; i < n; i++) { const w = sz * (.6 + R() * .8); decal(B, 'stain', slots[(R() * slots.length) | 0], x0 + R() * (x1 - x0), y + i * .0004, z0 + R() * (z1 - z0), w, w * (.6 + R() * .5), { face: 'u', ry: R() * PI * 2 }); } };
+    scatter(-44, -47, 58, -35, 16, ['crack', 'patch', 'oil0', 'dust'], 3);
+    scatter(29, -30, 59, 5, 14, ['crack', 'patch', 'dust', 'oil2'], 3);
+    scatter(-58, -30, -26, 30, 16, ['dust', 'oil1', 'litter', 'tyre2'], 3);
+    scatter(-22, -30, 26, 1, 14, ['dust', 'patch', 'litter'], 3.2);
+    scatter(-30, 31, 10, 47, 10, ['leaves', 'litter', 'dust'], 2.6);
+    scatter(28, 9, 58, 31, 10, ['litter', 'oil0', 'dust', 'crack'], 2.6);
+    scatter(BX0 + 1, BZ0 + 1, BX1 - 1, BZ1 - 1, 10, ['dust', 'patch', 'crack'], 3, L0 + .012);
+    for (const [x, z, w, f] of [[-24, 47.95, 50, 's'], [26, 47.95, 40, 's'], [-30, -47.95, 50, 'n'], [24, -47.95, 60, 'n']]) decal(B, 'stain', 'grime', x, .45, z, w, .9, { face: f });
+    for (const [x, z, f] of [[-59.95, -10, 'e'], [-59.95, 20, 'e'], [59.95, -20, 'w'], [59.95, 18, 'w']]) decal(B, 'stain', 'grime', x, .45, z, 24, .9, { face: f });
+    for (const y of [L0, L1]) { decal(B, 'stain', 'grime', 5, y + .4, 11.84, 10, .8, { face: 's' }); decal(B, 'stain', 'grime', 5, y + .4, 20.16, 10, .8, { face: 'n' }); }
+    for (const [x, z, f, t] of [[-20, 47.93, 's', 'ppe'], [16, 47.93, 's', 'crane'], [-59.93, 0, 'e', 'ppe'], [59.93, -2, 'w', 'noentry'], [8, -47.93, 'n', 'ppe']]) decal(B, 'sign', t, x, 1.7, z, 2.6, .24, { face: f });
+    // the crane's load: a bundle of formwork panels on chains under the hook
+    { const K = kit(B, 23.4, 15.4, true), hx = 6 + Math.sin(.62) * 30, hzz = -9 + Math.cos(.62) * 30;
+      K.push(hx, 20.4, hzz, .62); K.box('plywood', 0, 0, 0, 1.25, .5, 2.45); K.box('p_coat_yellow', 0, .5, 0, 1.3, .06, 2.5);
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) K.tube('steel_dark', [[a * .55, .55, b * 1.1], [0, 1.6, 0]], .012, { seg: 3 });
+      K.pop(); }
+
     // ================================================================ markers
     B.site('A', { x0: -2, z0: 6, x1: 20, z1: 27, y: L2 });
     B.site('B', { x0: 33, z0: -22, x1: 53, z1: 0 });
     B.rescue({ x0: -58, z0: -34, x1: -50, z1: -26 });
-    B.hostage(-9, L1, 6.5); B.hostage(19.5, L1, 25.5); B.hostage(55.4, 0, -8.6); B.hostage(-40, 0, -14.6); B.hostage(33.2, 0, 25.4);
+    B.hostage(-9, L1, 6.5); B.hostage(19, L1, 24.2); B.hostage(55.4, 0, -8.6); B.hostage(-40, 0, -14.6); B.hostage(33.2, 0, 25.4);
     B.point('dom1', -36, null, -2, 4); B.point('dom2', 6, L0, 7.5, 4); B.point('dom3', 44, null, 18, 4);
     B.point('hp1', 0, null, -19, 5); B.point('hp2', -6, L1, 7, 4); B.point('hp3', 42, null, -10, 5); B.point('hp4', -44, null, 39.6, 5); B.point('hp5', 13, L2, 21, 4);
     B.point('hill', 2, null, -19, 5);
-    B.point('flag1', -50, null, -30.5, 1.5); B.point('flag2', 47, null, 29.5, 1.5);
+    B.point('flag1', -50, 0, -30.5, 1.5); B.point('flag2', 47, null, 29.5, 1.5);
     B.point('extract1', -56, null, 18, 3); B.point('extract2', 12, null, -42, 3); B.point('extract3', 57, null, 2, 3);
-    B.point('hq1', -38, null, -17, 4); B.point('hq2', 18, L1, 24, 4);
+    B.point('hq1', -38, 0, -17, 4); B.point('hq2', 18, L1, 24, 4);
 
     for (const [x, y, z, k] of [[2, L0, 15, 'dark'], [7, L0, 15.5, 'under'], [-46.6, 0, -13.2, 'dark'], [-46, 0, 39.6, 'car'], [17.8, null, 37, 'grass'],
       [-24, 0, 8.4, 'closet'], [56.2, 0, -8, 'closet'], [-13.5, 0, 42.4, 'crates'], [-11, L1, 5, 'dark'], [16.8, L2, 25.2, 'crates'], [54, 3.1, 33, 'roof'],
       [-8.6, 0, -15.2, 'car'], [-8, 0, 45.6, 'bush'], [33.6, 0, 25.3, 'closet'], [31.6, 0, -22.6, 'crates'], [22, L1, 11.4, 'dark']]) B.hide(x, y, z, { kind: k });
 
     // field spawns (T1 = west / south-west half, T2 = east / north-east half) and FFA
-    for (const [x, z] of [[-40, -28.6], [-56, -28], [-30, -38], [-27, -12], [-52, 0], [-36, 15], [-48, 26], [-18, -42], [-10, -24], [-52, 40]]) B.spawn(1, x, null, z, face(x, z, 6, 6), { field: true });
-    for (const [x, z] of [[45, 22], [54, 12], [36, 19], [30, 38], [54, -40], [40, -38], [28, 22], [22, 46], [50, 30], [32, 1]]) B.spawn(2, x, null, z, face(x, z, 6, 6), { field: true });
-    for (const [x, y, z] of [[-54, 0, -18], [-52, 0, 20], [-30, 0, 40], [-6, 0, 40], [28, 0, 32], [46, 0, 22], [57, 0, 2], [52, 0, -42], [22, 0, -40], [-14, 0, -40], [-30, 0, -15],
+    for (const [x, z] of [[-40, -28.6], [-56, -28], [-36, -28.6], [-27, -12], [-50, 4], [-36, 15], [-48, 26], [-18, -42], [-10, -24], [-52, 40]]) B.spawn(1, x, null, z, face(x, z, 6, 6), { field: true });
+    for (const [x, z] of [[45, 22], [54, 12], [36, 19], [30, 38], [56, -26], [35.5, -25.5], [28, 22], [22, 46], [50, 30], [32, 1]]) B.spawn(2, x, null, z, face(x, z, 6, 6), { field: true });
+    for (const [x, y, z] of [[-54, 0, -18], [-54, 0, 17.5], [-30, 0, 40], [-6, 0, 40], [28, 0, 32], [46, 0, 22], [57, 0, 2], [52, 0, -42], [22, 0, -40], [-14, 0, -40], [-30, 0, -15],
       [0, 0, -6], [20, 0, -18], [-8, L0, 8], [20, L0, 23], [-8, L1, 13], [19, L1, 16], [-2, L2, 25], [20, L2, 8], [44, 0, -18]]) B.spawn(0, x, y, z, face(x, z, 6, 6));
 
     finish(B);
+    B.pop();
   },
 };

@@ -79,8 +79,12 @@ js/maps/defs/<id>.js       one file per map (export default MapDef)
 js/maps/defs/prop_gallery.js  dev map: every prop type laid out in labelled rows (tools/test/props.mjs)
 js/modes/index.js          MODES registry (all 26 ids, `available` flag) + loadMode(id) / getMode(id)
 js/modes/<id>.js           one file per game mode (export default ModeDef); js/modes/common.js = shared helpers (bombMode base...)
-js/bots/bot.js             bot brain (states, objectives, hiding, grenades), produces commands
-js/bots/aim.js             human-like aim (reaction, tracking error, recoil control) by difficulty
+js/bots/bot.js             bot brain (senses, plan per mode goal + tactics, fight, movement, grenades) + BotManager (system 'bots')
+js/bots/aim.js             human-like aim (reaction, flick + settle spring, tracking lag, recoil control) by difficulty, profiles
+js/bots/perception.js      vision light model, sight lines, hearing ranges, memory of last known positions
+js/bots/path.js            time-sliced path service (budget per tick, cache) + path follower (steering, links, stuck escalation)
+js/bots/team.js            team knowledge with radio delay, callouts, bomb round plan (gather / execute / lurk / rotate), team buy
+js/bots/tactics.js         callout area names, cover, hold-angle spots, routes / staging, open angles, grenade throw solver
 js/chars/human.js          third-person characters: the 'bodies' system (game.js registers createCharacters via setBodyFactory), §4b
 js/chars/anim.js           procedural animation (pure JS): gait shared with hitbox.js, aim / recoil / reload / throw / plant / knife / flinch
 js/chars/kit.js            human kit loading (assets/models/human_kit.glb + gloves), the one character material (LFChar plugin), Batch
@@ -332,7 +336,11 @@ over a drop fills an empty slot, USE swaps.
 Combat (combat.js): `SURF_RES` pen points per metre (glass .6, wood 2.2, plaster 3, brick 6.5, concrete 9, metal 22, ...), a player
 costs .6, at most 2 victims / 4 walls per bullet; shotguns: one cone offset per trigger pull, pellets spread by `spread.pellet`.
 Hitboxes (hitbox.js): 15 capsules (head sphere, neck, chest, stomach, pelvis = stomach group, upper / fore arms, thighs, shins, feet)
-in a rifle-carry pose; crouch lowers the upper body .52 m, lean shears the upper body so the eye lands on move.js leanOffset.
+in a rifle-carry pose; crouch lowers the upper body .52 m, lean shears the upper body so the eye lands on move.js leanOffset
+(the arms turn rigidly about their shoulders). The arms follow the drawn soldier (`ARMP`, measured from js/chars/anim.js): rifle or
+pistol hold (`s.pistol`, else the category of `s.inv[s.cur]`), hip -> aiming down the sights (`s.ads`, else `s.ws.ads`), so the net
+layer must give remote players their current slot and `ws.ads`; `poseShapes(s, out, grip)` also returns the right-hand grip anchor
+the drawn gun is held at.
 Legs follow the gait (player.js `updateGait` stores `gait gaitK gaitS gaitSt gaitH gaitDir` from `hitbox.gaitParams(speed, crouch, out,
 side)`): ankles on the stance / swing curve `gaitFoot`, knees by two-bone IK, a pelvis drop for long reaches, hips twisted toward a
 diagonal motion (`gaitTwist`). js/chars/anim.js draws the legs from the SAME numbers, so the drawn legs sit on the leg capsules
@@ -650,9 +658,15 @@ nav.walkLine(a, b) -> bool     nav.reachable(a, b, gatesOpen)     nav.flood(node
 nav.setGate(colliderId, open)  nav.gatesOpen(bool)  nav.isCrouchOnly(i)  nav.isGate(i)  nav.linksOf(i)  nav.component(i)  nav.stats
 nav.losClear(a, b) / nav.losBlocked(a, b)          // world ray (glass is see-through) + blockers
 nav.addBlocker({ x, y, z, r } | { test(ax, ay, az, bx, by, bz) -> bool, active }) -> remove()   // smoke volumes (grenades)
+// bots (bots worker): findPath opts.weight (heuristic weight, 1 = optimal); nav.pathTask(from, to, opts) -> task, task.step(maxExpand)
+// -> done, task.path | null (time-sliced; one sliced search per Nav, a new one aborts the previous; findPath does not disturb it);
+// nav.openness(i) -> 0..8 walk neighbours; nav.nodesNear(x, y, z, r, out, { stride, dy, max }); nav.nX / nZ / nY node coordinates.
 ```
 Measured (headless Chromium): dev_range builds in ~0.4-0.65 s (nav ~0.13-0.3 s, 25k nodes); a synthetic 160 x 160 m map with
 40 two-storey buildings and 3000 colliders builds in 0.65 s (nav 0.32 s, 143k nodes); a cross-map A* takes ~8 ms, a LOS check ~5 us.
+A* (bots worker rewrite: inline-keyed heap, node coordinate arrays): ~0.3 us per expansion; harbor (108k nodes) random pairs at weight
+1.35 expand 1k-70k nodes (avg ~2.5 ms, worst ~20 ms), so bots never search synchronously: js/bots/path.js runs pathTask with a budget of
+5000 expansions / 1.1 ms per tick. String pulling tests at most ~10 candidate legs per waypoint (it used to try 80).
 
 Every map must satisfy `validate.js` (`validateMap(info) -> { ok, errors, warnings, stats }`): spawns not inside colliders
 (checked from 20 cm up) and on the ground, spaced apart, lobby spawns inside their lobby; lobbies sealed by their gates while
@@ -785,6 +799,26 @@ the juggernaut, a flag carrier, survivors for the infected (melee)), 'hide' (hid
 the head start), 'seek' (seeker: check hide spots), 'flag' (take the enemy flag / bring it home), 'return' (touch your dropped flag),
 'rescue' (go to a hostage and hold USE / carry it into a rescue zone), 'roam' (no objective). TDM-like modes give a 'hunt' toward a map
 point that rotates every 25 s (no knowledge of enemy positions).
+
+**Bots (js/bots, bots worker).** Host-only brains that fill a Command per tick (game.js: `game.bots.brain(p).think(dt, cmd)`); they
+never read hidden state: enemies are known only from sight (view cone, light, line of sight through `nav.losClear` = walls, smoke
+blockers, foliage), hearing (`footstep`, `shot`, `reload`, `land`, `grenade:throw`, objective `plant_start` / `defuse_start`; ranges in
+perception.js `HEAR`, quieter through walls), being hit (`hit`), and team-mates' reports passed on 0.7-1.6 s later (team.js; callouts
+as `chat` events `{ from, text, team, bot: true }`, rate limited). The mode's goal comes from `mode.botGoal(game, bot)` every ~0.4 s;
+the bomb modes add a team round plan (gather at a staging point on the lobby -> site route, execute together with smokes / flashes,
+optional lurker, defenders hold angles from spots computed per site (`tactics.holdSpots`) and rotate on callouts, plant / defuse only
+when safe or forced by the clock, save when a defuse cannot finish). Bots read `p.hold`, `p.blind`, `p.flash`, `p.busy`, `p.hidden`,
+`p.speedMul` (through movement), hold USE for plant / defuse / hostage pickup / weapon swaps, and switch to `melee` for goals with
+`melee: true`. Economy modes: `game.bots.handlesBuy = true`; the team buys once per round in the buy window (pistol / eco / force /
+full by average money and loss streak, one sniper, armour, kit, grenades; `economy.requestDrop` for a poor team-mate). Grenades: a bot
+selects the slot, aims with `tactics.nadeAim` (ballistic solution, arc checked against the world; a 'nades' system may offer
+`aimFor(p, gid, to) -> { yaw, pitch, under }` and the bots use it) and presses / releases FIRE (ADS = underhand), so it needs the
+'nades' system (`game.throwNade`); without it bots throw nothing. Difficulty: `cfg.botSkill` / `p.skill` 0..1 (`SKILLS` easy .2,
+normal .45, hard .7, expert .92), interpolated between the aim.js `DIFFICULTY` profiles (reaction, turn speed, error, tracking lag,
+recoil control, head chance, trigger discipline, counter-strafe, spray / burst / tap, sight range, hearing). Paths: path.js runs
+`nav.pathTask` time-sliced (5000 expansions / 1.1 ms per tick, one at a time, priority queue, 6 s cache), with `wallCost` and `wide`
+smoothing so bodies keep off corners. `game.bots.stats()` (per-tick cost percentiles, paths, grenades, buys) and
+`game.bots.brain(p).debug()` are the test hooks; `node tools/test/bots.mjs` plays matches on every map (§13).
 
 Modes (all 26 available; defaults, every one can be overridden by cfg.options): tdm (10 min / 75), ffa (10 min / 30 kills),
 demolition (24 rounds MR12, 115 s, 12 s freeze, 20 s buy, economy, MR3 overtime $10000), wingman (one site, 16 rounds, 90 s, economy),
@@ -1000,6 +1034,11 @@ that everything loads and estimates GPU memory per tier.
   `LF.game` (`debugStep`, `setLocalCommand`, `aimAt`): TDM kills / scores / no NaN / no fall-through / bots move / safe respawns /
   gates, combat rules (friendly fire, armour, penetration, exact RPM, semi limit, reload time, backstab), FFA, match end -> results ->
   menu, menu flow (title -> practice setup -> deploy -> pause -> quit -> second match). Screenshots `match-*.png`.
+* `node tools/test/bots.mjs [--maps=dev_range,harbor|all] [--modes=tdm,demolition] [--mins=3] [--bots=10] [--skill=.45] [--noshots]`:
+  bots-only matches (the local player is removed) on dev_range and every map def in js/maps/defs: kills on both teams, nobody stuck
+  (wants to move but moves < 1 m in 10 s; logged with task / goal), no NaN / falls, demolition plants and defuses / detonations, team
+  buys, the per-tick bot cost (avg and p99 over the 64 Hz ticks), zero console errors; spectator shots `bots-<map>-<mode>-n.png`,
+  results in tools/test/out/bots-results.json.
 * `node tools/test/modes.mjs [--only=a,b] [--maps=harbor,nightclub|none] [--nodev] [--noshots] [--skipnode]`: economy / objectives /
   flow unit checks in Node, then every mode on dev_range with a scripted objective run (plant + explode, defuse, rescue, captures, HQ,
   VIP, ladders, infection, hide & seek...), then every mode on the real maps with a generic script that reads the map's objective

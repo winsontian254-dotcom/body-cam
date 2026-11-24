@@ -8,11 +8,36 @@
        decal(kind, point, normal, size, opts) place a decal ('hole' | 'hole_metal' | 'hole_wood' | 'hole_glass' | 'blood')
        tracer(from, to, color, speed)      a tracer streak
        flash(node | point, local, dir)     muzzle flash + light
+       litMeshes(meshes)                   add viewmodel meshes to the muzzle light (it lights ONLY those: no light slot on the world)
        frame(dt), dispose()
-     PARTICLE_KINDS, DECAL_KINDS
-   Listens to game.bus: 'shot' (flash, tracer, casing), 'impact' (burst + hole), 'bullet:body' (blood + splats), 'kill'. */
+     PARTICLE_KINDS, DECAL_KINDS, muzzleKind(stats) -> 'supp'|'flash'|'brake'|'comp'|'choke'|'bare'
+   Listens to game.bus: 'shot' (flash by muzzle device, smoke wisp, tracer, casing), 'cycle' (manual-action casing / shotgun hull),
+   'impact' (burst + hole), 'bullet:body' (blood + splats), 'kill'.
+   Weapons integration: brass and shotgun hulls are separate pools that bounce on floors AND walls; lasers (beam + dot, every
+   player with a visible laser switched on: weapon instance w.dev), flashlights (one SpotLight for the local player, created the
+   first time a light is switched on; other players' lights are lens flares that dazzle the local player when pointed at him:
+   game.dazzle 0..1 for the HUD), scope glint of enemies aiming magnified optics toward the camera, thrown melee in flight
+   (weapon.js game.thrown). */
 import { clamp } from '../core/util.js';
 import { raycast } from '../phys/ray.js';
+import { eyePos } from '../phys/move.js';
+import { currentWeapon, statsOf, adsZoom } from './weapon.js';
+import { getGun } from '../weapons/data.js';
+import { buildGun } from '../weapons/models.js';
+
+export function muzzleKind(st) {
+  if (!st) return 'bare';
+  if (st.suppressed) return 'supp';
+  const ids = st.attachments || [];
+  for (const a of ids) { if (a === 'm_flash') return 'flash'; if (a === 'm_brake') return 'brake'; if (a === 'm_comp') return 'comp'; if (a === 'm_choke') return 'choke'; }
+  if (st.flashHide) return 'flash';
+  const g = getGun(st.id), mz = g && g.model && g.model.muzzle;
+  return mz === 'brake' || mz === 'comp' || mz === 'flash' ? mz : 'bare';
+}
+const FLASH = {   // local flash shapes: front scale, side jets length / width, up jets, brightness
+  bare: { f: 1, s: 1, w: 1, up: 0, I: 1 }, flash: { f: 0.45, s: 0.55, w: 0.6, up: 0, I: 0.55 }, brake: { f: 0.6, s: 1.7, w: 1.1, up: 0, I: 1.1 },
+  comp: { f: 0.8, s: 0.6, w: 0.8, up: 1.2, I: 1 }, choke: { f: 1.2, s: 1.1, w: 1.2, up: 0, I: 1.2 }, supp: { f: 0, s: 0, w: 0, up: 0, I: 0 },
+};
 
 const BB = () => BABYLON;
 export const PARTICLE_KINDS = ['spark', 'dust', 'chip', 'mist'];
@@ -211,23 +236,33 @@ export class Effects {
     tm.material = fxMat(scene, 'fxm_tracer', this.tex.tracer, true);
     tm.thinInstanceSetBuffer('matrix', this.tr.mat4, 16, false); tm.thinInstanceSetBuffer('color', this.tr.col, 4, false);
     tm.thinInstanceCount = 0; tm.isVisible = false;
-    // casings
-    this.cas = { max: 40, n: 0, d: new Float32Array(40 * 12), mat4: new Float32Array(40 * 16) };
-    const cm = this.cas.mesh = B.MeshBuilder.CreateCylinder('fx_casing', { height: 1, diameter: 1, tessellation: 8 }, scene);
+    // casings (brass) and shotgun hulls (red plastic with a brass head)
     const brass = new B.PBRMaterial('fxm_brass', scene); brass.albedoColor = new B.Color3(0.72, 0.52, 0.22); brass.metallic = 1; brass.roughness = 0.32;
-    cm.material = brass; cm.isPickable = false; cm.alwaysSelectAsActiveMesh = true;
-    cm.thinInstanceSetBuffer('matrix', this.cas.mat4, 16, false); cm.thinInstanceCount = 0; cm.isVisible = false;
+    const hull = new B.PBRMaterial('fxm_hull', scene); hull.albedoColor = new B.Color3(0.45, 0.05, 0.04); hull.metallic = 0; hull.roughness = 0.5;
+    const pool = (name, mat, max) => {
+      const P = { max, n: 0, d: new Float32Array(max * 12), mat4: new Float32Array(max * 16) };
+      const cm = P.mesh = B.MeshBuilder.CreateCylinder(name, { height: 1, diameter: 1, tessellation: 8 }, scene);
+      cm.material = mat; cm.isPickable = false; cm.alwaysSelectAsActiveMesh = true;
+      cm.thinInstanceSetBuffer('matrix', P.mat4, 16, false); cm.thinInstanceCount = 0; cm.isVisible = false;
+      return P;
+    };
+    this.cas = pool('fx_casing', brass, 48); this.hulls = pool('fx_hull', hull, 16);
     // local muzzle flash (on the viewmodel muzzle, group 1) + remote flashes (pool 'flare') + one light
     this.flashLocal = this.makeLocalFlash();
     this.light = new B.PointLight('muzzleLight', new B.Vector3(0, -100, 0), scene);
     this.light.diffuse = new B.Color3(1, 0.72, 0.42); this.light.specular = new B.Color3(0.6, 0.45, 0.3);
     this.light.intensity = 0; this.light.range = 9; this.lightT = 0; this.lightI = 0;
+    // the muzzle light only lights the viewmodel (an empty includedOnlyMeshes would mean "everything", so it starts with a stub)
+    this.lightStub = new B.Mesh('muzzleLightStub', scene); this.lightStub.isVisible = false; this.lightStub.setEnabled(false);
+    this.light.includedOnlyMeshes = [this.lightStub];
+    this.wisp = 0; this.laserDots = null;
     this.localFlashT = 9;
     this.q = new B.Quaternion(); this.v = new B.Vector3(); this.v2 = new B.Vector3();
     this.ray = { out: { hit: false, dist: 0, point: { x: 0, y: 0, z: 0 }, normal: { x: 0, y: 0, z: 0 }, surf: null, id: -1 } };
     const bus = game.bus;
     this.offs = [
       bus.on('shot', e => this.onShot(e)),
+      bus.on('cycle', e => { if (e.eject && e.p && e.p.local && e.gun && e.gun.cycle) { const vm = this.g.viewmodel; if (vm && vm.visible) this.casing(vm.ejectNode(), e.p, e.gun, true); } }),
       bus.on('impact', e => this.onImpact(e)),
       bus.on('bullet:body', e => this.onBody(e)),
       bus.on('round:reset', () => { for (const k in this.decals) this.decals[k].clear(); }),
@@ -254,19 +289,20 @@ export class Effects {
     if (local) {
       const mz = vm.muzzleNode();
       if (mz) { mz.computeWorldMatrix(true); const wp = mz.getAbsolutePosition(); ox = wp.x; oy = wp.y; oz = wp.z;
-        if (!hide) { const f = this.flashLocal; if (f.root.parent !== mz) f.root.parent = mz; f.root.position.set(0, 0, 0); f.root.rotation.set(0, 0, Math.random() * 6.28); const s = 0.75 + Math.random() * 0.5; f.root.scaling.set(s, s, s * (0.8 + Math.random() * 0.5)); f.root.setEnabled(true); this.localFlashT = 0; } }
-      this.casing(vm.ejectNode(), p, st);
+        const fk = FLASH[muzzleKind(st)] || FLASH.bare, big = st.cat === 'shotgun' ? 1.3 : st.cat === 'pistol' || st.cat === 'smg' ? 0.8 : 1;
+        if (!hide) { const f = this.flashLocal; if (f.root.parent !== mz) f.root.parent = mz; f.root.position.set(0, 0, 0); f.root.rotation.set(0, 0, Math.random() * 6.28); const s = (0.75 + Math.random() * 0.5) * big; f.root.scaling.set(s, s, s * (0.8 + Math.random() * 0.5)); f.root.setEnabled(true); this.localFlashT = 0;
+          const [fr, s1, s2] = f.meshes; fr.scaling.set(0.11 * fk.f, 0.11 * fk.f, 1); s1.scaling.set(0.07 * fk.w, 0.16 * Math.max(fk.s, fk.up), 1); s2.scaling.set(0.07 * fk.w, 0.16 * fk.s, 1);
+          s1.rotation.set(Math.PI / 2, 0, fk.up ? Math.PI / 2 : 0); fr.setEnabled(fk.f > 0); }
+        this.wisp = Math.min(1.5, this.wisp + (st.suppressed ? 0.35 : 0.22)); this.wispNode = mz; }
+      if (!st.cycle) this.casing(vm.ejectNode(), p, st);
     } else if (p) {
       const b = g.bodies && g.bodies.muzzleOf ? g.bodies.muzzleOf(p, this.v) : null;
       if (b) { ox = b.x; oy = b.y; oz = b.z; }
       if (!hide) this.pools.flare.emit(ox + e.dir.x * 0.05, oy + e.dir.y * 0.05, oz + e.dir.z * 0.05, 0, 0, 0, 0.055, 0.22 + Math.random() * 0.15, 0.3, 1, 0.85, 0.6, 1, 0, 0, 0);
     }
-    if (!hide) {
-      const cam = g.camera.position, d = Math.hypot(ox - cam.x, oy - cam.y, oz - cam.z);
-      if (local || d < 45) {
-        const I = local ? 1.6 : 1.2 * clamp(1 - d / 45, 0, 1);
-        if (I >= this.lightI * 0.6) { this.light.position.set(ox + e.dir.x * 0.3, oy + e.dir.y * 0.3, oz + e.dir.z * 0.3); this.lightI = I; this.lightT = 0; }
-      }
+    if (!hide && local) {
+      const fk = FLASH[muzzleKind(st)] || FLASH.bare;
+      this.light.position.set(ox + e.dir.x * 0.3, oy + e.dir.y * 0.3, oz + e.dir.z * 0.3); this.lightI = 1.6 * fk.I; this.lightT = 0;
     }
     // tracers (every Nth round per gun, and always a faint one for the local player's first pellet)
     const tc = st.tracerColor || [1, 0.78, 0.45];
@@ -394,21 +430,23 @@ export class Effects {
     if (n) { mesh.thinInstanceBufferUpdated('matrix'); mesh.thinInstanceBufferUpdated('color'); }
   }
 
-  casing(node, p, st) {
-    if (!node || !st || st.cat === 'shotgun' && st.cycle === 'pump' || st.reloadKind === 'cylinder' || st.reloadKind === 'break') return;
+  casing(node, p, st, manual) {
+    if (!node || !st || st.reloadKind === 'cylinder' || st.reloadKind === 'break') return;
     node.computeWorldMatrix(true);
     const wp = node.getAbsolutePosition(), m = node.getWorldMatrix().m;
-    const C = this.cas; let i = C.n; if (i >= C.max) i = Math.floor(Math.random() * C.max); else C.n++;
+    const hull = st.cat === 'shotgun';
+    const C = hull ? this.hulls : this.cas; let i = C.n; if (i >= C.max) i = Math.floor(Math.random() * C.max); else C.n++;
     const d = C.d, o = i * 12;
-    const big = /762|308|338|50/.test(st.caliber || '') ? 1.35 : /9|45|38|357/.test(st.caliber || '') ? 0.75 : 1;
+    const big = hull ? 2.05 : /50|338/.test(st.caliber || '') ? 1.7 : /762|308|7\.62/.test(st.caliber || '') ? 1.35 : /9|45|38|357|10mm|5\.7|4\.6/.test(st.caliber || '') ? 0.72 : 1;
     // right + up of the gun, a little back
-    const rs = 1.6 + Math.random() * 1.2, us = 1.2 + Math.random() * 0.9;
+    const rs = (manual ? 1.0 : 1.6) + Math.random() * 1.2, us = (manual ? 0.8 : 1.2) + Math.random() * 0.9;
     d[o] = wp.x; d[o + 1] = wp.y; d[o + 2] = wp.z;
     d[o + 3] = m[0] * rs + m[4] * us - m[8] * 0.3 + p.vel.x; d[o + 4] = m[1] * rs + m[5] * us - m[9] * 0.3 + p.vel.y; d[o + 5] = m[2] * rs + m[6] * us - m[10] * 0.3 + p.vel.z;
     d[o + 6] = 0; d[o + 7] = Math.random() * 6.28; d[o + 8] = (Math.random() - 0.5) * 30; d[o + 9] = big; d[o + 10] = 0; d[o + 11] = 0;
   }
-  updateCasings(dt) {
-    const C = this.cas, d = C.d, M = C.mat4, world = this.g.world;
+  updateCasings(dt) { this.updateCasePool(this.cas, dt, 0.0105, 0.034); this.updateCasePool(this.hulls, dt, 0.0105, 0.034); }
+  updateCasePool(C, dt, rad, len) {
+    const d = C.d, M = C.mat4, world = this.g.world, R = this.ray;
     let n = C.n;
     for (let i = 0; i < n; i++) {
       const o = i * 12;
@@ -416,7 +454,19 @@ export class Effects {
       if (d[o + 6] > 8) { n--; if (i !== n) d.copyWithin(o, n * 12, n * 12 + 12); i--; continue; }
       if (d[o + 11] > 2) continue;   // resting
       d[o + 4] -= 9.8 * dt;
-      const nx = d[o] + d[o + 3] * dt, ny = d[o + 1] + d[o + 4] * dt, nz = d[o + 2] + d[o + 5] * dt;
+      let nx = d[o] + d[o + 3] * dt, ny = d[o + 1] + d[o + 4] * dt, nz = d[o + 2] + d[o + 5] * dt;
+      // walls: reflect the horizontal velocity off what the case would pass through
+      const hs = Math.hypot(d[o + 3], d[o + 5]) * dt;
+      if (hs > 1e-4 && world) {
+        const dir = this.v3 || (this.v3 = { x: 0, y: 0, z: 0 }); dir.x = d[o + 3] * dt / hs; dir.y = 0; dir.z = d[o + 5] * dt / hs;
+        const org = this.o3 || (this.o3 = { x: 0, y: 0, z: 0 }); org.x = d[o]; org.y = d[o + 1] + 0.01; org.z = d[o + 2];
+        const r = raycast(world, org, dir, hs + 0.01, R);
+        if (r.hit && Math.abs(r.normal.y) < 0.5) {
+          const vn = d[o + 3] * r.normal.x + d[o + 5] * r.normal.z;
+          d[o + 3] = (d[o + 3] - 2 * vn * r.normal.x) * 0.35; d[o + 5] = (d[o + 5] - 2 * vn * r.normal.z) * 0.35; d[o + 8] *= -0.6;
+          nx = d[o] + r.normal.x * 0.004; nz = d[o + 2] + r.normal.z * 0.004;
+        }
+      }
       const g = d[o + 4] < 0 ? world.groundAt(nx, nz, d[o + 1] + 0.02, 0) : null;
       if (g && ny <= g.y + 0.006) {
         d[o + 1] = g.y + 0.006; d[o + 4] *= -0.32; d[o + 3] *= 0.4; d[o + 5] *= 0.4; d[o + 8] *= 0.4; d[o + 11]++; d[o] = nx; d[o + 2] = nz;
@@ -430,7 +480,7 @@ export class Effects {
       const o = i * 12, s = d[o + 9], m = i * 16;
       B.Quaternion.RotationYawPitchRollToRef(d[o + 7], d[o + 11] > 2 ? Math.PI / 2 : d[o + 7] * 1.7, d[o + 7] * 0.6, q);
       const x = q.x, y = q.y, z = q.z, w = q.w;
-      const sx = 0.0105 * s, sy = 0.034 * s, sz = 0.0105 * s;
+      const sx = rad * (s > 1.9 ? 1.95 : s), sy = len * (s > 1.9 ? 1.95 : s), sz = rad * (s > 1.9 ? 1.95 : s);
       M[m] = (1 - 2 * (y * y + z * z)) * sx; M[m + 1] = 2 * (x * y + z * w) * sx; M[m + 2] = 2 * (x * z - y * w) * sx; M[m + 3] = 0;
       M[m + 4] = 2 * (x * y - z * w) * sy; M[m + 5] = (1 - 2 * (x * x + z * z)) * sy; M[m + 6] = 2 * (y * z + x * w) * sy; M[m + 7] = 0;
       M[m + 8] = 2 * (x * z + y * w) * sz; M[m + 9] = 2 * (y * z - x * w) * sz; M[m + 10] = (1 - 2 * (x * x + y * y)) * sz; M[m + 11] = 0;
@@ -453,6 +503,138 @@ export class Effects {
     this.lightT += dt;
     this.light.intensity = this.lightT < 0.06 ? this.lightI * (1 - this.lightT / 0.06) : 0;
     if (this.lightT >= 0.06) this.lightI = 0;
+    this.smokeWisp(dt);
+    this.devices(dt);
+    this.thrownFx(dt);
+  }
+
+  /** viewmodel meshes the muzzle light may light (called by the viewmodel when it builds a model) */
+  litMeshes(list) { const L = this.light.includedOnlyMeshes; for (const m of list) if (m && L.indexOf(m) < 0) L.push(m); }
+
+  // ---------------------------------------------------------------------------------------------- smoke wisp off the muzzle
+  smokeWisp(dt) {
+    if (this.wisp <= 0) return;
+    const p = this.g.local, firing = p && p.ws && p.ws.since < 0.12;
+    this.wisp = Math.max(0, this.wisp - dt * (firing ? 0.2 : 0.9));
+    const mz = this.wispNode; if (!mz || firing || !mz.isEnabled() || Math.random() > this.wisp * 0.6) return;
+    mz.computeWorldMatrix(true); const wp = mz.getAbsolutePosition(), amb = this.amb;
+    this.pools.dust.emit(wp.x, wp.y, wp.z, (Math.random() - 0.5) * 0.06, 0.12 + Math.random() * 0.12, (Math.random() - 0.5) * 0.06, 0.9 + Math.random() * 0.8,
+      0.015, 0.09, 0.75 * amb, 0.75 * amb, 0.76 * amb, 0.13 * Math.min(1, this.wisp), 0.5, -0.05, (Math.random() - 0.5) * 1.5);
+  }
+
+  // ---------------------------------------------------------------------------------------------- lasers, flashlights, glint
+  devPools() {
+    if (this.dv) return this.dv;
+    const B = BB(), S = this.scene;
+    const beamTex = this.tex.tracer, dotTex = this.tex.soft;
+    const mk = (name, tex, max) => {
+      const P = { max, n: 0, mat4: new Float32Array(max * 16), col: new Float32Array(max * 4) };
+      const m = P.mesh = quadMesh(S, name); m.material = fxMat(S, name + 'M', tex, true);
+      m.thinInstanceSetBuffer('matrix', P.mat4, 16, false); m.thinInstanceSetBuffer('color', P.col, 4, false); m.thinInstanceCount = 0; m.isVisible = false;
+      return P;
+    };
+    this.dv = { beam: mk('fx_laserBeam', beamTex, 16), dot: mk('fx_laserDot', dotTex, 24), O: { x: 0, y: 0, z: 0 }, D: { x: 0, y: 0, z: 0 }, R: { out: { hit: false, dist: 0, point: { x: 0, y: 0, z: 0 }, normal: { x: 0, y: 0, z: 0 }, surf: null, id: -1 } } };
+    void B; return this.dv;
+  }
+  /** a camera-facing quad at p with half size s (row-major thin-instance matrix) */
+  billboard(P, x, y, z, s, r, g, b, a) {
+    if (P.n >= P.max) return; const i = P.n++, M = P.mat4, m = i * 16, cm = this.g.camera.getWorldMatrix().m;
+    M[m] = cm[0] * s; M[m + 1] = cm[1] * s; M[m + 2] = cm[2] * s; M[m + 3] = 0; M[m + 4] = cm[4] * s; M[m + 5] = cm[5] * s; M[m + 6] = cm[6] * s; M[m + 7] = 0;
+    M[m + 8] = cm[8]; M[m + 9] = cm[9]; M[m + 10] = cm[10]; M[m + 11] = 0; M[m + 12] = x; M[m + 13] = y; M[m + 14] = z; M[m + 15] = 1;
+    const C = P.col, c = i * 4; C[c] = r; C[c + 1] = g; C[c + 2] = b; C[c + 3] = a;
+  }
+  beam(P, ax, ay, az, bx, by, bz, w, r, g, b, a) {
+    if (P.n >= P.max) return; const i = P.n++, M = P.mat4, m = i * 16, cp = this.g.camera.globalPosition, cm = this.g.camera.getWorldMatrix().m;
+    let dx = bx - ax, dy = by - ay, dz = bz - az; const L = Math.hypot(dx, dy, dz) || 1e-3; dx /= L; dy /= L; dz /= L;
+    const px = (ax + bx) / 2, py = (ay + by) / 2, pz = (az + bz) / 2;
+    const tx = cp.x - px, ty = cp.y - py, tz = cp.z - pz;
+    let sx = dy * tz - dz * ty, sy = dz * tx - dx * tz, sz = dx * ty - dy * tx; const sl = Math.hypot(sx, sy, sz) || 1; sx /= sl; sy /= sl; sz /= sl;
+    M[m] = sx * w; M[m + 1] = sy * w; M[m + 2] = sz * w; M[m + 3] = 0; M[m + 4] = dx * L; M[m + 5] = dy * L; M[m + 6] = dz * L; M[m + 7] = 0;
+    M[m + 8] = cm[8]; M[m + 9] = cm[9]; M[m + 10] = cm[10]; M[m + 11] = 0; M[m + 12] = px; M[m + 13] = py; M[m + 14] = pz; M[m + 15] = 1;
+    const C = P.col, c = i * 4; C[c] = r; C[c + 1] = g; C[c + 2] = b; C[c + 3] = a;
+  }
+  devices(dt) {
+    const g = this.g, cam = g.camera; if (!cam || !g.players) return;
+    const me = g.local, vm = g.viewmodel, cp = cam.globalPosition;
+    let D = null, dazzle = 0, myLight = null;
+    for (const q of g.players.values()) {
+      if (!q.alive) continue;
+      const w = currentWeapon(q); if (!w || w.melee) continue;
+      const st = statsOf(w); if (!st || (!st.laser && !st.light && !(st.zoom >= 3 || (st.zoomLevels || []).some(z => z >= 3)))) continue;
+      if (!D) D = this.devPools();
+      const local = q === me && vm && vm.visible;
+      const O = D.O, dir = D.D;
+      // origin + direction: the viewmodel emitter for the local player, the eye (+ the gun's offset) for everyone else
+      const ws = q.ws || {}, yaw = q.yaw + (ws.ax || 0) * Math.PI / 180 + (ws.swX || 0), pitch = q.pitch - (ws.ay || 0) * Math.PI / 180 - (ws.swY || 0);
+      dir.x = Math.sin(yaw) * Math.cos(pitch); dir.y = -Math.sin(pitch); dir.z = Math.cos(yaw) * Math.cos(pitch);
+      const on = w.dev !== false;
+      let em = null;
+      if (local) em = vm.emitter('laser') || vm.emitter('light') || vm.muzzleNode();
+      if (em) { em.computeWorldMatrix(true); const wp = em.getAbsolutePosition(); O.x = wp.x; O.y = wp.y; O.z = wp.z; }
+      else if (q === me && !local) { O.x = cp.x; O.y = cp.y - 0.08; O.z = cp.z; }      // scoped: from just under the eye
+      else { eyePos(q, O); const rx = Math.cos(q.yaw), rz = -Math.sin(q.yaw); O.x += rx * 0.12 + dir.x * 0.55; O.y += -0.12 + dir.y * 0.55; O.z += rz * 0.12 + dir.z * 0.55; }
+      // laser beam + dot
+      if (on && st.laser && st.laser !== 'ir') {
+        const c = st.laser === 'green' ? [0.25, 1, 0.3] : [1, 0.12, 0.08];
+        const r = raycast(g.world, O, dir, 80, D.R), L = r.hit ? r.dist : 80;
+        const ex = O.x + dir.x * L, ey = O.y + dir.y * L, ez = O.z + dir.z * L;
+        this.beam(D.beam, O.x, O.y, O.z, ex, ey, ez, 0.0022, c[0], c[1], c[2], local ? 0.16 : 0.22);
+        if (r.hit) { const dc = Math.hypot(ex - cp.x, ey - cp.y, ez - cp.z); this.billboard(D.dot, ex + r.normal.x * 0.005, ey + r.normal.y * 0.005, ez + r.normal.z * 0.005, 0.008 + dc * 0.0016, c[0] * 2, c[1] * 2, c[2] * 2, 1); }
+      }
+      // flashlight: the local player's is a real spot light; others show a flare and can dazzle
+      if (on && st.light) {
+        if (q === me) myLight = { O: { ...O }, dir: { ...dir }, st };
+        else {
+          const tx = cp.x - O.x, ty = cp.y - O.y, tz = cp.z - O.z, td = Math.hypot(tx, ty, tz) || 1;
+          const face = (tx * dir.x + ty * dir.y + tz * dir.z) / td, cone = Math.cos((st.light.cone || 0.3) * 1.1);
+          if (face > cone && td < (st.light.range || 25) * 1.3) {
+            const k = clamp((face - cone) / (1 - cone), 0, 1) * clamp(1 - td / ((st.light.range || 25) * 1.3), 0, 1);
+            const vis = !raycast(g.world, O, { x: tx / td, y: ty / td, z: tz / td }, td - 0.3, D.R).hit;
+            if (vis) { this.billboard(D.dot, O.x, O.y, O.z, 0.08 + 0.25 * k + td * 0.004, 1.6 * k + 0.3, 1.55 * k + 0.3, 1.4 * k + 0.25, 0.9); if (me && me.alive) dazzle = Math.max(dazzle, k); }
+          } else this.billboard(D.dot, O.x, O.y, O.z, 0.03, 0.6, 0.6, 0.55, 0.5);
+        }
+      }
+      // scope glint: an enemy aiming a magnified optic toward the camera
+      if (q !== me && ws.ads > 0.5 && adsZoom(q) >= 2.5) {
+        const tx = cp.x - O.x, ty = cp.y - O.y, tz = cp.z - O.z, td = Math.hypot(tx, ty, tz) || 1;
+        const face = (tx * dir.x + ty * dir.y + tz * dir.z) / td;
+        if (face > 0.94 && td > 6) {
+          const k = Math.pow((face - 0.94) / 0.06, 2) * (this.amb > 0.5 ? 1 : 0.4);
+          eyePos(q, O); O.x += dir.x * 0.25; O.y += dir.y * 0.25 - 0.015; O.z += dir.z * 0.25;
+          const vis = !raycast(g.world, O, { x: tx / td, y: ty / td, z: tz / td }, td - 0.3, D.R).hit;
+          if (vis) this.billboard(D.dot, O.x, O.y, O.z, 0.05 + td * 0.0055 * k, 1.8 * k, 1.75 * k, 1.6 * k, k);
+        }
+      }
+    }
+    g.dazzle = clamp((g.dazzle || 0) + (dazzle - (g.dazzle || 0)) * Math.min(1, dt * 10), 0, 1);
+    // local flashlight
+    if (myLight && !this.spot) {
+      const B = BB();
+      this.spot = new B.SpotLight('flashlight', new B.Vector3(0, 0, 0), new B.Vector3(0, 0, 1), 0.6, 8, this.scene);
+      this.spot.diffuse = new B.Color3(1, 0.97, 0.9); this.spot.specular = new B.Color3(0.5, 0.5, 0.48); this.spot.intensity = 0;
+    }
+    if (this.spot) {
+      const sp = this.spot;
+      if (myLight) {
+        const L = myLight.st.light; sp.position.set(myLight.O.x, myLight.O.y, myLight.O.z); sp.direction.set(myLight.dir.x, myLight.dir.y, myLight.dir.z);
+        sp.angle = (L.cone || 0.3) * 2; sp.range = (L.range || 25) * 1.4; sp.intensity = (L.lumens || 800) / 1000 * 14;
+      } else sp.intensity = 0;
+    }
+    if (D) {
+      for (const P of [D.beam, D.dot]) { const m = P.mesh; m.thinInstanceCount = P.n; m.isVisible = P.n > 0; if (P.n) { m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('color'); } P.n = 0; }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- thrown melee in flight
+  thrownFx(dt) {
+    const list = this.g.thrown || [], seen = this.thrSeen || (this.thrSeen = new Map());
+    for (const t of list) {
+      let gm = seen.get(t.id);
+      if (!gm) { try { gm = buildGun(this.scene, t.w.gunId, { lod: 1 }); for (const m of gm.root.getChildMeshes(false)) m.isPickable = false; } catch (e) { gm = null; } seen.set(t.id, gm || false); }
+      if (!gm) continue;
+      gm.root.position.set(t.x, t.y, t.z); gm.root.rotation.set(t.rot, t.yaw, 0);
+    }
+    for (const [id, gm] of seen) if (!list.some(t => t.id === id)) { if (gm) gm.dispose(); seen.delete(id); }
   }
 
   dispose() {
@@ -460,7 +642,10 @@ export class Effects {
     for (const k in this.pools) this.pools[k].dispose();
     for (const k in this.decals) this.decals[k].dispose();
     this.tr.mesh.material.dispose(); this.tr.mesh.dispose();
-    this.cas.mesh.material.dispose(); this.cas.mesh.dispose();
+    this.cas.mesh.material.dispose(); this.cas.mesh.dispose(); this.hulls.mesh.material.dispose(); this.hulls.mesh.dispose();
+    if (this.dv) for (const P of [this.dv.beam, this.dv.dot]) { P.mesh.material.dispose(); P.mesh.dispose(); }
+    if (this.spot) this.spot.dispose(); this.lightStub.dispose();
+    if (this.thrSeen) for (const gm of this.thrSeen.values()) if (gm) gm.dispose();
     for (const m of this.flashLocal.meshes) m.dispose(); this.flashLocal.root.dispose();
     this.light.dispose();
     for (const k in this.tex) this.tex[k].dispose();

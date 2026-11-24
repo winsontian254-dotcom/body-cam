@@ -47,6 +47,8 @@ export class Ragdoll {
     this.S = new Float32Array(N * 3);                                       // start of the sub-step (swept collision)
     this.R0 = new Float32Array(N * 3);                                      // death pose relative to the pelvis (muscle tone)
     this.W = new Float32Array(N * 3); this.win = 0; this.calm = 0;          // sleep window
+    this.G = new Float32Array(N);                                           // floor height (+ radius) per particle
+    this.CP = new Float32Array(N * 4); this.CT = new Uint8Array(N);         // wall contact plane (n, d) per particle + its life (sub-steps)
     this.rigid = []; this.range = []; this.t = 0; this.acc = 0; this.asleep = false; this.still = 0; this.N = N; this.fric = new Float32Array(N);
   }
   fromPose(O) {
@@ -65,7 +67,7 @@ export class Ragdoll {
     this.range = RANGE.map(([a, b, lo, hi]) => { const L = len(a, b); return [I[a] * 3, I[b] * 3, L * lo, L * hi]; });
     const p0 = I.pelvis * 3;
     for (let k = 0; k < N; k++) for (let j = 0; j < 3; j++) this.R0[k * 3 + j] = P[k * 3 + j] - P[p0 + j];
-    this.t = 0; this.asleep = false; this.still = 0; this.W.set(P); this.win = 0; this.calm = 0;
+    this.t = 0; this.asleep = false; this.still = 0; this.W.set(P); this.win = 0; this.calm = 0; this.CT.fill(0);
     return this;
   }
   /** velocity in m/s added to every particle (Verlet: move the previous positions) */
@@ -92,17 +94,17 @@ export class Ragdoll {
     let moved = 0;
     while (this.acc >= SUB) { this.acc -= SUB; moved = Math.max(moved, this.sub(world)); }
     // sleep once nothing has moved for a while: per sub-step motion, or (contact jitter between the floor and the constraints)
-    // no particle more than 1.2 cm away from where it was a quarter of a second ago
+    // no particle more than 2 cm away from where it was a quarter of a second ago
     if (moved < 0.0006 && this.t > 0.6) { this.still += dt; if (this.still > 0.6) this.asleep = true; } else this.still = 0;
     this.win += dt;
     if (this.win >= 0.25) {
       const P = this.P, W = this.W; let m = 0;
       for (let k = 0; k < N * 3; k += 3) m = Math.max(m, Math.hypot(P[k] - W[k], P[k + 1] - W[k + 1], P[k + 2] - W[k + 2]));
-      this.calm = this.t > 0.8 && m < 0.012 ? this.calm + 1 : 0;
+      this.calm = this.t > 0.8 && m < 0.02 + 0.025 * Math.min(1, Math.max(0, (this.t - 2.5) / 2)) ? this.calm + 1 : 0;   // looser later: a body creeping on step edges
       if (this.calm >= 2) this.asleep = true;
       W.set(P); this.win = 0;
     }
-    if (this.t > 8) this.asleep = true;
+    if (this.t > 7) this.asleep = true;
   }
   sub(world) {
     const P = this.P, Q = this.Q, S = this.S, h2 = SUB * SUB;
@@ -123,11 +125,23 @@ export class Ragdoll {
       const p0 = I.pelvis * 3;
       for (let k = 0; k < N; k++) { if (k === I.pelvis) continue; const i = k * 3; for (let j = 0; j < 3; j++) P[i + j] += ((P[p0 + j] + this.R0[i + j]) - P[i + j]) * tone; }
     }
+    // the floor under every particle (once per sub-step), enforced inside the constraint iterations so the bones and the floor
+    // agree (clamping only afterwards left them fighting: a body never came to rest)
+    const G = this.G, CP = this.CP, CT = this.CT;
+    if (world) for (let k = 0; k < N; k++) { const i = k * 3, gr = world.groundAt(P[i], P[i + 2], Math.max(P[i + 1], S[i + 1]) + RAD[k] + 0.25, 0, GOUT); G[k] = gr ? gr.y + RAD[k] : -1e9; }
+    else G.fill(-1e9);
     for (let it = 0; it < ITER; it++) {
       for (const [a, b, L] of this.rigid) solve(P, a, b, L, L);
       for (const [a, b, lo, hi] of this.range) solve(P, a, b, lo, hi);
       this.hinges();
+      for (let k = 0; k < N; k++) {
+        const i = k * 3;
+        if (P[i + 1] < G[k]) P[i + 1] = G[k];
+        // walls touched recently: stay on the open side of the contact plane (a body wedged in a corner comes to rest)
+        if (CT[k]) { const c = k * 4, sd = P[i] * CP[c] + P[i + 1] * CP[c + 1] + P[i + 2] * CP[c + 2] - CP[c + 3]; if (sd < 0) { P[i] -= CP[c] * sd; P[i + 1] -= CP[c + 1] * sd; P[i + 2] -= CP[c + 2] * sd; } }
+      }
     }
+    for (let k = 0; k < N; k++) if (CT[k]) CT[k]--;
     // world collision
     let moved = 0;
     if (world) for (let k = 0; k < N; k++) {
@@ -144,15 +158,20 @@ export class Ragdoll {
           P[i] = S[i] + DIR.x * back + n.x * 0.002; P[i + 1] = S[i + 1] + DIR.y * back + n.y * 0.002; P[i + 2] = S[i + 2] + DIR.z * back + n.z * 0.002;
           // friction: lose the tangential motion (previous position pulled along)
           this.fric[k] = 1;
-          Q[i] = P[i] - (P[i] - Q[i]) * 0.3; Q[i + 1] = P[i + 1] - (P[i + 1] - Q[i + 1]) * 0.3; Q[i + 2] = P[i + 2] - (P[i + 2] - Q[i + 2]) * 0.3;
+          // remember the wall as a contact plane (n . p >= d) for the next sub-steps (not floors: groundAt handles those)
+          if (n.y < 0.7) { const c = k * 4; CP[c] = n.x; CP[c + 1] = n.y; CP[c + 2] = n.z; CP[c + 3] = n.x * P[i] + n.y * P[i + 1] + n.z * P[i + 2] - 0.001; CT[k] = 48; }
+          // inelastic: drop the velocity into the surface, keep 30% of the sliding part
+          let vx = P[i] - Q[i], vy = P[i + 1] - Q[i + 1], vz = P[i + 2] - Q[i + 2]; const vn = vx * n.x + vy * n.y + vz * n.z;
+          if (vn < 0) { vx -= n.x * vn; vy -= n.y * vn; vz -= n.z * vn; }
+          Q[i] = P[i] - vx * 0.3; Q[i + 1] = P[i + 1] - vy * 0.3; Q[i + 2] = P[i + 2] - vz * 0.3;
         }
       }
       // floor (stairs / ramps / terrain): never below the walkable top under the particle
       const gr = world.groundAt(P[i], P[i + 2], P[i + 1] + r + 0.25, 0, GOUT);
-      if (gr && P[i + 1] - r < gr.y) {
+      if (gr && P[i + 1] - r < gr.y + 0.003) {
         P[i + 1] = gr.y + r; this.fric[k] = 1;
         Q[i] = P[i] - (P[i] - Q[i]) * 0.45; Q[i + 2] = P[i + 2] - (P[i + 2] - Q[i + 2]) * 0.45;
-        if (Q[i + 1] < P[i + 1] - 0.0) Q[i + 1] = P[i + 1] - (P[i + 1] - Q[i + 1]) * 0.2;
+        if (Q[i + 1] < P[i + 1]) Q[i + 1] = P[i + 1];           // no bounce
       }
     }
     // NaN guard

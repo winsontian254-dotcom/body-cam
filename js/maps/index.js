@@ -12,7 +12,7 @@ export const MAPS = [
   { id: 'motel', name: 'Starlite Motel', size: 'S', time: 'night', ready: true,
     setting: 'Two-storey roadside motel on a desert highway at night: exterior walkways, numbered rooms, drained pool, neon sign, diner with booths and kitchen, gas pumps, parked cars, ice machine.',
     layout: 'A site = diner; B site = upper-floor rooms by the office. Hiding: rooms, cars, dumpsters. Lobbies: highway bus shelter (T1), laundry room (T2).' },
-  { id: 'bank', name: 'First Federal', size: 'M', time: 'day',
+  { id: 'bank', name: 'First Federal', size: 'M', time: 'day', ready: true,
     setting: 'Downtown bank branch and the street outside: marble lobby with teller line, offices, safety-deposit vault, security room, loading alley, parked armoured van, rooftop HVAC.',
     layout: 'Hostage-friendly. A site = vault; B site = loading alley. Street + rooftop flanks. Lobbies: parking garage ramp (T1), staff break room (T2).' },
   { id: 'refinery', name: 'Black Creek Refinery', size: 'L', time: 'overcast', ready: true,

@@ -28,7 +28,7 @@ export default {
   onRoundEnd(game, r) { if (r.winner === 2) for (const p of game.players.values()) if (p.team === 2 && p.alive) { p.score += 5; ms(p).survived = (ms(p).survived | 0) + 1; } },
   hud(game) {
     const m = game.match, me = game.local, h = game.objectives.s.hold, seek = me && me.team === 1;
-    const top = h && h.on ? (seek ? 'RELEASED IN ' + Math.ceil(h.t) : 'HIDE! SEEKERS RELEASED IN ' + Math.ceil(h.t)) : m.alive(2) + ' HIDERS LEFT · ' + fmt(m.t);
+    const top = h && h.on ? (seek ? 'RELEASED IN ' + Math.ceil(h.t) : 'HIDE! SEEKERS RELEASED IN ' + Math.ceil(h.t)) : m.alive(2) + (m.alive(2) === 1 ? ' HIDER LEFT · ' : ' HIDERS LEFT · ') + fmt(m.t);
     return { top, bottom: seek ? 'FIND EVERY HIDER' : me && me.hidden ? 'HIDDEN' : 'STAY OUT OF SIGHT · CROUCH IN A HIDE SPOT', markers: game.objectives.markers(me) };
   },
   score: g => rows(g),

@@ -437,15 +437,25 @@ export function facade(B, x0, z0, x1, z1, o = {}) {
 const skyState = new WeakMap();
 function skyMats(scene) {
   let st = skyState.get(scene); if (st) return st;
-  const mk = (name, draw) => {
+  const mk = (name, draw, metal = 0.1, rough = 0.7, env = 0.8) => {
     const dt = new BABYLON.DynamicTexture(name, { width: 256, height: 512 }, scene, true);
     const g = dt.getContext(); draw(g); dt.update(true); dt.wrapU = dt.wrapV = 1;
-    const m = new BABYLON.PBRMaterial(name, scene); m.albedoTexture = dt; m.metallic = 0.1; m.roughness = 0.7; m.environmentIntensity = 0.8;
+    const m = new BABYLON.PBRMaterial(name, scene); m.albedoTexture = dt; m.metallic = metal; m.roughness = rough; m.environmentIntensity = env;
     return m;
   };
   const r = rng(3);
   st = [
-    mk('bk_sky_glass', g => { g.fillStyle = '#5b6a78'; g.fillRect(0, 0, 256, 512); for (let j = 0; j < 16; j++) for (let i = 0; i < 4; i++) { const v = 70 + r() * 50; g.fillStyle = `rgb(${v * .8},${v * .95},${v * 1.15})`; g.fillRect(i * 64 + 3, j * 32 + 4, 58, 26); } }),
+    // curtain wall: dark tinted glass panes (some with blinds drawn), mullions, light spandrel bands at every floor
+    mk('bk_sky_glass', g => {
+      g.fillStyle = '#28323c'; g.fillRect(0, 0, 256, 512);
+      for (let j = 0; j < 16; j++) for (let i = 0; i < 8; i++) {
+        const v = 38 + r() * 40, b = r() < 0.18; g.fillStyle = b ? `rgb(${120 + r() * 40},${118 + r() * 36},${110 + r() * 30})` : `rgb(${v * .75},${v * .92},${v * 1.15})`;
+        g.fillRect(i * 32 + 2, j * 32 + 7, 28, b ? 12 + r() * 10 : 23);
+        if (b) { g.fillStyle = `rgb(${v * .75},${v * .92},${v * 1.15})`; g.fillRect(i * 32 + 2, j * 32 + 22, 28, 8); }
+      }
+      g.fillStyle = '#7d858c'; for (let j = 0; j < 16; j++) g.fillRect(0, j * 32, 256, 6);
+      g.fillStyle = '#1a2026'; for (let i = 0; i < 8; i++) g.fillRect(i * 32, 0, 2, 512);
+    }, 0.35, 0.3, 1.0),
     mk('bk_sky_stone', g => { g.fillStyle = '#a69c8a'; g.fillRect(0, 0, 256, 512); for (let j = 0; j < 16; j++) for (let i = 0; i < 4; i++) { const v = 40 + r() * 40; g.fillStyle = `rgb(${v},${v * 1.05},${v * 1.1})`; g.fillRect(i * 64 + 18, j * 32 + 8, 28, 18); } }),
     mk('bk_sky_brick', g => { g.fillStyle = '#7a5644'; g.fillRect(0, 0, 256, 512); for (let j = 0; j < 16; j++) for (let i = 0; i < 4; i++) { const v = 35 + r() * 35; g.fillStyle = `rgb(${v},${v * 1.05},${v * 1.12})`; g.fillRect(i * 64 + 14, j * 32 + 7, 36, 19); g.fillStyle = '#8b6a56'; g.fillRect(i * 64 + 10, j * 32 + 26, 44, 3); } }),
   ];

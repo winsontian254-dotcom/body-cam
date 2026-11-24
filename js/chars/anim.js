@@ -331,7 +331,9 @@ export function animate(A, I, dt, O) {
   // aim frame: forward along (yaw, pitch), rolled with the lean
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
   set3(T.s, sy * cp, -sp, cy * cp);
-  set3(T.u, -Math.sin(I.lean || 0) * 0.3 * cy, 1, Math.sin(I.lean || 0) * 0.3 * sy);
+  // the gun rolls with the upper body (the same angle as hitbox.js lean: the eye .36 m sideways about the pelvis)
+  const lre = Math.max(0.3, (1.64 - 0.52 * crouch) - (0.885 - 0.42 * crouch)), lth = Math.asin(clamp(Math.sin((I.lean || 0) * Math.PI / 2) * 0.36 / lre, -0.95, 0.95));
+  set3(T.u, Math.sin(lth) * cy, Math.cos(lth), -Math.sin(lth) * sy);
   const aim = F1; frameZ(aim, [0, 0, 0], T.s, T.u);
   const gun = O.gun; O.gunOn = false; O.itemOn = false; O.mag.mode = 'in';
   let lhTarget = null;                                       // support hand world target (when it leaves the gun)
